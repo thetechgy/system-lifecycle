@@ -93,6 +93,8 @@ ci: Add Bats testing workflow
 
 6. Address any review feedback
 
+7. PRs are merged using **regular merge commits** (not squash or rebase)
+
 ## Testing
 
 Run tests before submitting:
