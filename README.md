@@ -166,6 +166,23 @@ Shell scripts are linted with ShellCheck:
 shellcheck linux/**/*.sh
 ```
 
+### Testing
+
+This project uses [Bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System) for testing:
+
+```bash
+# Install bats
+sudo apt-get install bats
+
+# Run all tests
+bats tests/
+
+# Run specific test file
+bats tests/lib/utils.bats
+```
+
+Tests are automatically run in CI on push to `develop` and PRs to `main`.
+
 ## License
 
 MIT

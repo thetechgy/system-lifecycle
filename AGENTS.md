@@ -67,6 +67,7 @@ All bash scripts must:
 4. Make executable: `chmod +x`
 5. If adding an alias, update `configure-bashrc.sh`
 6. Update `README.md` if adding/changing/removing functionality
+7. Add Bats tests in `tests/` directory
 
 ## Available Library Functions
 
@@ -104,6 +105,27 @@ git push origin develop
 
 Releases go to `main` via PR only.
 
+## Testing
+
+Tests use [Bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System).
+
+**Test file structure:**
+- `tests/test_helper.bash` - Common setup and helpers
+- `tests/lib/*.bats` - Tests for shared libraries
+- `tests/ubuntu/*.bats` - Tests for Ubuntu scripts
+
+**Running tests:**
+```bash
+bats tests/           # Run all tests
+bats tests/lib/       # Run library tests only
+```
+
+**Test guidelines:**
+- Test `--help` and `--version` flags
+- Test invalid argument handling
+- Test exit codes match `utils.sh` constants
+- Use `load '../test_helper'` in each test file
+
 ## Avoid
 
 - Committing to `main` branch directly
@@ -113,3 +135,4 @@ Releases go to `main` via PR only.
 - Modifying files without backup
 - Interactive prompts in automated scripts (use `DEBIAN_FRONTEND=noninteractive`)
 - Changing functionality without updating README.md
+- Adding scripts without corresponding tests
