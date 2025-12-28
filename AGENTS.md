@@ -41,7 +41,8 @@ All bash scripts must:
 
 2. **Source shared libraries:**
    ```bash
-   readonly SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+   SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+   readonly SCRIPT_DIR
    readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
 
    source "${LIB_DIR}/colors.sh"
@@ -49,7 +50,10 @@ All bash scripts must:
    source "${LIB_DIR}/utils.sh"
    ```
 
-3. **Pass shellcheck** with no warnings
+3. **Pass shellcheck locally before committing:**
+   ```bash
+   shellcheck linux/**/*.sh
+   ```
 
 4. **Support standard flags:** `--help`, `--dry-run` where applicable
 
@@ -91,6 +95,7 @@ git pull origin develop
 
 After changes:
 ```bash
+shellcheck linux/**/*.sh   # Must pass before committing
 git add .
 git commit -m "Description"
 git push origin develop

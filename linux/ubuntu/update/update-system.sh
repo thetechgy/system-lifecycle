@@ -37,13 +37,16 @@ set -o pipefail  # Catch pipeline failures
 # Script Configuration
 # -----------------------------------------------------------------------------
 
-readonly SCRIPT_NAME="$(basename "${0}")"
+SCRIPT_NAME="$(basename "${0}")"
+readonly SCRIPT_NAME
 readonly SCRIPT_VERSION="1.0.0"
-readonly SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
+readonly SCRIPT_DIR
 readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
 
 # Default flags
 DRY_RUN=false
+# shellcheck disable=SC2034  # Used by logging.sh
 QUIET=false
 SKIP_NPM=false
 

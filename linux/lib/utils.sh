@@ -10,13 +10,19 @@
 # Dependencies:
 #   - logging.sh (must be sourced first for log_error)
 
-# Exit codes
+# Exit codes (used by scripts that source this library)
+# shellcheck disable=SC2034
 readonly EXIT_SUCCESS=0
+# shellcheck disable=SC2034
 readonly EXIT_ERROR=1
+# shellcheck disable=SC2034
 readonly EXIT_INVALID_ARGS=2
 readonly EXIT_NOT_ROOT=3
+# shellcheck disable=SC2034
 readonly EXIT_APT_UPDATE_FAILED=4
+# shellcheck disable=SC2034
 readonly EXIT_APT_UPGRADE_FAILED=5
+# shellcheck disable=SC2034
 readonly EXIT_NPM_UPDATE_FAILED=6
 
 # Check if a command exists
