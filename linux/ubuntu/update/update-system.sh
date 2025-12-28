@@ -419,8 +419,13 @@ firmware_update() {
   section "Updating Firmware"
 
   if ! command_exists fwupdmgr; then
-    log_warning "fwupdmgr is not installed, skipping firmware updates"
-    return 0
+    log_info "Installing fwupd for firmware updates..."
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y fwupd 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "fwupd installed successfully"
+    else
+      log_error "Failed to install fwupd"
+      return 1
+    fi
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
