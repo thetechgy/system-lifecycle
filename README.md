@@ -2,7 +2,7 @@
 
 Personal scripts for building, configuring, and maintaining Linux and Windows systems across their lifecycle.
 
-> **Note**: These scripts are primarily created for my own use and reflect my personal preferences and workflows. You're welcome to use them as-is or fork and adapt them to your own needs.
+> **Note**: These scripts are created for my own use and reflect my personal preferences. You're welcome to use them or fork and adapt them to your needs, but **please review the code thoroughly before running** to understand what it will do to your system. I accept no liability for any damage or issues that may result from using these scripts.
 
 ## Repository Structure
 
