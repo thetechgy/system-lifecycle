@@ -30,3 +30,11 @@ repos:
     hooks:
       - id: shellcheck
         args: ["--severity=warning"]
+
+  # ----------------------------
+  # Markdown linting
+  # ----------------------------
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.17.1
+    hooks:
+      - id: markdownlint-cli2
