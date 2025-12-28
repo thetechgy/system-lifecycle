@@ -59,7 +59,7 @@ sudo ./linux/ubuntu/update/update-system.sh
 | `-n, --no-npm` | Skip npm global package updates |
 | `--no-snap` | Skip snap package updates |
 | `--no-flatpak` | Skip flatpak package updates |
-| `--firmware` | Enable firmware updates (requires fwupd) |
+| `--firmware` | Enable firmware updates (auto-installs fwupd if needed) |
 | `--clean` | Use apt-get clean (remove ALL cached packages) |
 | `-h, --help` | Display help message |
 | `-v, --version` | Display script version |
@@ -74,7 +74,7 @@ The Ubuntu update script performs the following operations in order:
 4. `snap refresh` - Update snap packages (if installed)
 5. `flatpak update` - Update flatpak packages (if installed)
 6. `npm update -g` - Update global npm packages (if installed)
-7. `fwupdmgr update` - Update firmware (only with --firmware flag)
+7. `fwupdmgr update` - Update firmware (only with --firmware flag, skipped on WSL)
 8. `apt-get autoremove` - Remove unused packages
 9. `apt-get autoclean` - Clean package cache (or `apt-get clean` with --clean)
 
@@ -93,6 +93,11 @@ The Ubuntu update script performs the following operations in order:
 ### Logging
 
 Logs are written to `/var/log/system-lifecycle/update-system-YYYYMMDD-HHMMSS.log`
+
+### Notes
+
+- **WSL**: Firmware updates are automatically skipped on WSL environments (detected via `/proc/version`)
+- **fwupd**: The `--firmware` flag will auto-install fwupd if not already present
 
 ## Configure Script
 
