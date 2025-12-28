@@ -10,11 +10,15 @@
 #   sudo ./update-system.sh [OPTIONS]
 #
 # Options:
-#   -d, --dry-run     Show what would be done without making changes
-#   -q, --quiet       Suppress non-essential output
-#   -n, --no-npm      Skip npm package updates
-#   -h, --help        Display this help message
-#   -v, --version     Display script version
+#   -d, --dry-run      Show what would be done without making changes
+#   -q, --quiet        Suppress non-essential output
+#   -n, --no-npm       Skip npm package updates
+#   --no-snap          Skip snap package updates
+#   --no-flatpak       Skip flatpak package updates
+#   --firmware         Enable firmware updates (opt-in)
+#   --clean            Use apt-get clean instead of autoclean
+#   -h, --help         Display this help message
+#   -v, --version      Display script version
 #
 # Exit Codes:
 #   0 - Success
@@ -49,6 +53,10 @@ DRY_RUN=false
 # shellcheck disable=SC2034  # Used by logging.sh
 QUIET=false
 SKIP_NPM=false
+SKIP_SNAP=false
+SKIP_FLATPAK=false
+RUN_FIRMWARE=false
+RUN_CLEAN=false
 
 # -----------------------------------------------------------------------------
 # Source Libraries
@@ -74,17 +82,22 @@ Usage: ${SCRIPT_NAME} [OPTIONS]
 Ubuntu 24.04 LTS System Update Script
 
 Options:
-    -d, --dry-run     Show what would be done without making changes
-    -q, --quiet       Suppress non-essential output
-    -n, --no-npm      Skip npm package updates
-    -h, --help        Display this help message
-    -v, --version     Display script version
+    -d, --dry-run      Show what would be done without making changes
+    -q, --quiet        Suppress non-essential output
+    -n, --no-npm       Skip npm package updates
+    --no-snap          Skip snap package updates
+    --no-flatpak       Skip flatpak package updates
+    --firmware         Enable firmware updates (requires fwupd)
+    --clean            Use apt-get clean (remove ALL cached packages)
+    -h, --help         Display this help message
+    -v, --version      Display script version
 
 Examples:
-    sudo ${SCRIPT_NAME}              # Full update
+    sudo ${SCRIPT_NAME}              # Full update (apt, snap, flatpak, npm)
     sudo ${SCRIPT_NAME} --dry-run    # Preview changes
-    sudo ${SCRIPT_NAME} --no-npm     # Skip npm updates
-    sudo ${SCRIPT_NAME} -q           # Quiet mode
+    sudo ${SCRIPT_NAME} --no-snap    # Skip snap updates
+    sudo ${SCRIPT_NAME} --firmware   # Include firmware updates
+    sudo ${SCRIPT_NAME} --clean      # Aggressive cache cleanup
 
 Exit Codes:
     0 - Success
@@ -119,6 +132,22 @@ parse_args() {
         ;;
       -n|--no-npm)
         SKIP_NPM=true
+        shift
+        ;;
+      --no-snap)
+        SKIP_SNAP=true
+        shift
+        ;;
+      --no-flatpak)
+        SKIP_FLATPAK=true
+        shift
+        ;;
+      --firmware)
+        RUN_FIRMWARE=true
+        shift
+        ;;
+      --clean)
+        RUN_CLEAN=true
         shift
         ;;
       -h|--help)
@@ -240,19 +269,35 @@ apt_autoremove() {
   fi
 }
 
-apt_autoclean() {
+apt_clean() {
   section "Cleaning Package Cache"
 
-  if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: apt-get autoclean"
-    return 0
-  fi
+  if [[ "${RUN_CLEAN}" == true ]]; then
+    # Full clean - removes ALL cached packages
+    if [[ "${DRY_RUN}" == true ]]; then
+      log_info "[DRY-RUN] Would run: apt-get clean"
+      return 0
+    fi
 
-  log_info "Running apt-get autoclean..."
-  if apt-get autoclean 2>&1 | tee -a "${LOG_FILE}"; then
-    log_success "Package cache cleaned successfully"
+    log_info "Running apt-get clean (removing all cached packages)..."
+    if apt-get clean 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Package cache cleaned successfully"
+    else
+      log_warning "Package cache cleanup had issues (non-critical)"
+    fi
   else
-    log_warning "Package cache cleanup had issues (non-critical)"
+    # Default - only removes obsolete packages
+    if [[ "${DRY_RUN}" == true ]]; then
+      log_info "[DRY-RUN] Would run: apt-get autoclean"
+      return 0
+    fi
+
+    log_info "Running apt-get autoclean..."
+    if apt-get autoclean 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Package cache cleaned successfully"
+    else
+      log_warning "Package cache cleanup had issues (non-critical)"
+    fi
   fi
 }
 
@@ -302,6 +347,112 @@ npm_update() {
 }
 
 # -----------------------------------------------------------------------------
+# Snap Functions
+# -----------------------------------------------------------------------------
+
+snap_update() {
+  if [[ "${SKIP_SNAP}" == true ]]; then
+    log_info "Skipping snap updates (--no-snap flag set)"
+    return 0
+  fi
+
+  section "Updating Snap Packages"
+
+  if ! command_exists snap; then
+    log_info "snap is not installed, skipping snap updates"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would run: snap refresh"
+    snap refresh --list 2>&1 | tee -a "${LOG_FILE}" || true
+    return 0
+  fi
+
+  log_info "Running snap refresh..."
+  if snap refresh 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Snap packages updated successfully"
+  else
+    log_warning "Some snap packages could not be updated"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# Flatpak Functions
+# -----------------------------------------------------------------------------
+
+flatpak_update() {
+  if [[ "${SKIP_FLATPAK}" == true ]]; then
+    log_info "Skipping flatpak updates (--no-flatpak flag set)"
+    return 0
+  fi
+
+  section "Updating Flatpak Packages"
+
+  if ! command_exists flatpak; then
+    log_info "flatpak is not installed, skipping flatpak updates"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would run: flatpak update -y"
+    return 0
+  fi
+
+  log_info "Running flatpak update..."
+  if flatpak update -y 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Flatpak packages updated successfully"
+  else
+    log_warning "Some flatpak packages could not be updated"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# Firmware Functions
+# -----------------------------------------------------------------------------
+
+firmware_update() {
+  if [[ "${RUN_FIRMWARE}" != true ]]; then
+    return 0
+  fi
+
+  section "Updating Firmware"
+
+  # Skip on WSL - firmware updates not applicable in virtualized environment
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    log_info "WSL detected - firmware updates not supported in virtualized environment"
+    return 0
+  fi
+
+  if ! command_exists fwupdmgr; then
+    log_info "Installing fwupd for firmware updates..."
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y fwupd 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "fwupd installed successfully"
+    else
+      log_error "Failed to install fwupd"
+      return 1
+    fi
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would run: fwupdmgr update"
+    log_info "Checking for firmware updates..."
+    fwupdmgr get-updates 2>&1 | tee -a "${LOG_FILE}" || true
+    return 0
+  fi
+
+  log_info "Refreshing firmware metadata..."
+  fwupdmgr refresh --force 2>&1 | tee -a "${LOG_FILE}" || true
+
+  log_info "Running firmware updates..."
+  if fwupdmgr update -y 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Firmware updated successfully"
+  else
+    log_warning "Some firmware updates could not be applied"
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 
@@ -312,7 +463,11 @@ main() {
 
   log_info "Starting system update..."
   log_info "Dry-run mode: ${DRY_RUN}"
+  log_info "Skip snap: ${SKIP_SNAP}"
+  log_info "Skip flatpak: ${SKIP_FLATPAK}"
   log_info "Skip npm: ${SKIP_NPM}"
+  log_info "Firmware updates: ${RUN_FIRMWARE}"
+  log_info "Full cache clean: ${RUN_CLEAN}"
 
   section "System Information"
   show_system_info
@@ -321,11 +476,18 @@ main() {
   apt_update
   apt_upgrade
   apt_dist_upgrade
-  apt_autoremove
-  apt_autoclean
 
-  # NPM updates
+  # Package manager updates
+  snap_update
+  flatpak_update
   npm_update
+
+  # Firmware updates (opt-in)
+  firmware_update
+
+  # Cleanup
+  apt_autoremove
+  apt_clean
 
   section "Update Complete"
 

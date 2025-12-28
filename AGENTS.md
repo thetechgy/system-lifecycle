@@ -66,6 +66,7 @@ All bash scripts must:
 3. Follow the header template (see existing scripts)
 4. Make executable: `chmod +x`
 5. If adding an alias, update `configure-bashrc.sh`
+6. Update `README.md` if adding/changing/removing functionality
 
 ## Available Library Functions
 
@@ -111,3 +112,4 @@ Releases go to `main` via PR only.
 - Scripts without `--help`
 - Modifying files without backup
 - Interactive prompts in automated scripts (use `DEBIAN_FRONTEND=noninteractive`)
+- Changing functionality without updating README.md
