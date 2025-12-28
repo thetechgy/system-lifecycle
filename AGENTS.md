@@ -107,7 +107,7 @@ git commit -m "Description"
 git push origin develop
 ```
 
-Releases go to `main` via PR only.
+Releases go to `main` via PR only. Use regular merge commits (not squash or rebase).
 
 ## Testing
 
