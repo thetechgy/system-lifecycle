@@ -28,23 +28,28 @@ system-lifecycle/
 
 ## Quick Start
 
+### First-Time Setup
+
+Configure shell aliases for easy access to scripts:
+
+```bash
+./linux/ubuntu/configure/configure-bashrc.sh
+source ~/.bashrc
+```
+
 ### Ubuntu System Update
 
 ```bash
-# Full system update
+# Using the alias (after setup)
+update-system              # Full update
+update-system --dry-run    # Preview changes
+update-system --no-npm     # Skip npm updates
+
+# Or run directly
 sudo ./linux/ubuntu/update/update-system.sh
-
-# Preview changes (dry-run)
-sudo ./linux/ubuntu/update/update-system.sh --dry-run
-
-# Skip npm updates
-sudo ./linux/ubuntu/update/update-system.sh --no-npm
-
-# Quiet mode
-sudo ./linux/ubuntu/update/update-system.sh --quiet
 ```
 
-### Options
+### Update Script Options
 
 | Flag | Description |
 |------|-------------|
@@ -80,6 +85,23 @@ The Ubuntu update script performs the following operations in order:
 ### Logging
 
 Logs are written to `~/logs/system-lifecycle/update-system-YYYYMMDD-HHMMSS.log`
+
+## Configure Script
+
+The `configure-bashrc.sh` script manages shell aliases in `~/.bashrc`:
+
+```bash
+# Add/update aliases
+./linux/ubuntu/configure/configure-bashrc.sh
+
+# Preview changes
+./linux/ubuntu/configure/configure-bashrc.sh --dry-run
+
+# Remove aliases
+./linux/ubuntu/configure/configure-bashrc.sh --remove
+```
+
+The script adds a managed section with markers, making it safe to run multiple times and easy to remove.
 
 ## Requirements
 
