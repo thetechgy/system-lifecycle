@@ -41,9 +41,10 @@ source ~/.bashrc
 
 ```bash
 # Using the alias (after setup)
-update-system              # Full update
+update-system              # Full update (apt, snap, flatpak, npm)
 update-system --dry-run    # Preview changes
-update-system --no-npm     # Skip npm updates
+update-system --no-snap    # Skip snap updates
+update-system --firmware   # Include firmware updates
 
 # Or run directly
 sudo ./linux/ubuntu/update/update-system.sh
@@ -56,6 +57,10 @@ sudo ./linux/ubuntu/update/update-system.sh
 | `-d, --dry-run` | Preview changes without applying |
 | `-q, --quiet` | Suppress non-essential output |
 | `-n, --no-npm` | Skip npm global package updates |
+| `--no-snap` | Skip snap package updates |
+| `--no-flatpak` | Skip flatpak package updates |
+| `--firmware` | Enable firmware updates (requires fwupd) |
+| `--clean` | Use apt-get clean (remove ALL cached packages) |
 | `-h, --help` | Display help message |
 | `-v, --version` | Display script version |
 
@@ -66,9 +71,12 @@ The Ubuntu update script performs the following operations in order:
 1. `apt-get update` - Refresh package lists
 2. `apt-get upgrade` - Upgrade installed packages
 3. `apt-get dist-upgrade` - Smart upgrade with dependency handling
-4. `apt-get autoremove` - Remove unused packages
-5. `apt-get autoclean` - Clean package cache
-6. `npm update -g` - Update global npm packages (if npm is installed)
+4. `snap refresh` - Update snap packages (if installed)
+5. `flatpak update` - Update flatpak packages (if installed)
+6. `npm update -g` - Update global npm packages (if installed)
+7. `fwupdmgr update` - Update firmware (only with --firmware flag)
+8. `apt-get autoremove` - Remove unused packages
+9. `apt-get autoclean` - Clean package cache (or `apt-get clean` with --clean)
 
 ### Exit Codes
 
