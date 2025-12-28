@@ -11,7 +11,7 @@
 #   - colors.sh (must be sourced first)
 
 # Default log directory (can be overridden before sourcing)
-LOG_DIR="${LOG_DIR:-${HOME}/logs/system-lifecycle}"
+LOG_DIR="${LOG_DIR:-/var/log/system-lifecycle}"
 LOG_FILE=""
 QUIET="${QUIET:-false}"
 

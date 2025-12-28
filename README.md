@@ -84,7 +84,7 @@ The Ubuntu update script performs the following operations in order:
 
 ### Logging
 
-Logs are written to `~/logs/system-lifecycle/update-system-YYYYMMDD-HHMMSS.log`
+Logs are written to `/var/log/system-lifecycle/update-system-YYYYMMDD-HHMMSS.log`
 
 ## Configure Script
 
