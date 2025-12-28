@@ -3,16 +3,8 @@ name: Bats Tests
 on:
   push:
     branches: [develop]
-    paths:
-      - '**.sh'
-      - '**.bats'
-      - 'tests/**'
   pull_request:
     branches: [main]
-    paths:
-      - '**.sh'
-      - '**.bats'
-      - 'tests/**'
 
 jobs:
   test:

@@ -3,12 +3,8 @@ name: ShellCheck
 on:
   push:
     branches: [develop]
-    paths:
-      - '**.sh'
   pull_request:
     branches: [main]
-    paths:
-      - '**.sh'
 
 jobs:
   shellcheck:
