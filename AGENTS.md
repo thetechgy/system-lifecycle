@@ -79,8 +79,28 @@ All bash scripts must:
 **From colors.sh:**
 - `RED`, `GREEN`, `YELLOW`, `BLUE`, `NC` (no color)
 
+## Git Workflow
+
+**Always work on `develop` branch. Never commit directly to `main`.**
+
+Before making changes:
+```bash
+git checkout develop
+git pull origin develop
+```
+
+After changes:
+```bash
+git add .
+git commit -m "Description"
+git push origin develop
+```
+
+Releases go to `main` via PR only.
+
 ## Avoid
 
+- Committing to `main` branch directly
 - Hardcoded paths (use variables)
 - Missing error handling
 - Scripts without `--help`

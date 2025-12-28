@@ -111,6 +111,25 @@ The script adds a managed section with markers, making it safe to run multiple t
 
 ## Development
 
+### Branching Workflow
+
+This repository uses a `develop` → `main` workflow:
+
+- **`develop`**: All active development happens here
+- **`main`**: Stable releases only, updated via PR from `develop`
+
+```bash
+# Ensure you're on develop
+git checkout develop
+
+# Make changes, commit, push
+git add .
+git commit -m "Your message"
+git push origin develop
+
+# When ready to release, create PR: develop → main
+```
+
 ### Pre-commit Hooks
 
 This repository uses pre-commit hooks for code quality:
