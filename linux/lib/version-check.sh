@@ -39,8 +39,9 @@ check_for_updates() {
   fi
 
   # Fetch latest from origin (quietly, with timeout)
-  # Skip if fetch fails (no network, etc.)
-  if ! timeout 5 git -C "${repo_root}" fetch origin main --quiet 2>/dev/null; then
+  # Skip if fetch fails (no network, no credentials, etc.)
+  # GIT_TERMINAL_PROMPT=0 prevents credential prompts
+  if ! GIT_TERMINAL_PROMPT=0 timeout 5 git -C "${repo_root}" fetch origin main --quiet 2>/dev/null; then
     return 0
   fi
 
