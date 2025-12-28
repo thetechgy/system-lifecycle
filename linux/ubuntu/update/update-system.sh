@@ -113,6 +113,7 @@ parse_args() {
         shift
         ;;
       -q|--quiet)
+        # shellcheck disable=SC2034  # Used by logging.sh
         QUIET=true
         shift
         ;;
