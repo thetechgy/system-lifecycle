@@ -109,6 +109,11 @@ git push origin develop
 
 Releases go to `main` via PR only. Use regular merge commits (not squash or rebase).
 
+After PR is merged to `main`, sync develop:
+```bash
+git fetch origin && git merge origin/main && git push origin develop
+```
+
 ## Testing
 
 Tests use [Bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System).
