@@ -30,11 +30,13 @@ check_for_updates() {
 
   # Skip if git is not installed
   if ! command -v git &>/dev/null; then
+    printf "Version check: skipped (git not installed)\n"
     return 0
   fi
 
   # Skip if not a git repository
   if ! git -C "${repo_root}" rev-parse --git-dir &>/dev/null; then
+    printf "Version check: skipped (not a git repository)\n"
     return 0
   fi
 
@@ -42,6 +44,7 @@ check_for_updates() {
   # Skip if fetch fails (no network, no credentials, etc.)
   # GIT_TERMINAL_PROMPT=0 prevents credential prompts
   if ! GIT_TERMINAL_PROMPT=0 timeout 5 git -C "${repo_root}" fetch origin main --quiet 2>/dev/null; then
+    printf "Version check: skipped (unable to reach remote)\n"
     return 0
   fi
 
@@ -49,8 +52,13 @@ check_for_updates() {
   local_rev=$(git -C "${repo_root}" rev-parse HEAD 2>/dev/null) || return 0
   remote_rev=$(git -C "${repo_root}" rev-parse origin/main 2>/dev/null) || return 0
 
-  # If already up to date, nothing to do
+  # If already up to date, report success
   if [[ "${local_rev}" == "${remote_rev}" ]]; then
+    if [[ -n "${GREEN:-}" ]] && [[ -n "${NC:-}" ]]; then
+      printf "%bVersion check: up to date%b\n" "${GREEN}" "${NC}"
+    else
+      printf "Version check: up to date\n"
+    fi
     return 0
   fi
 
@@ -61,11 +69,14 @@ check_for_updates() {
   if [[ "${behind_count}" -gt 0 ]]; then
     # Use colors if available, otherwise plain text
     if [[ -n "${YELLOW:-}" ]] && [[ -n "${NC:-}" ]]; then
-      printf "%b⚠️  Your scripts are %d commit(s) behind origin/main.%b\n" "${YELLOW}" "${behind_count}" "${NC}" >&2
+      printf "%bVersion check: %d commit(s) behind origin/main%b\n" "${YELLOW}" "${behind_count}" "${NC}"
     else
-      printf "⚠️  Your scripts are %d commit(s) behind origin/main.\n" "${behind_count}" >&2
+      printf "Version check: %d commit(s) behind origin/main\n" "${behind_count}"
     fi
-    printf "    Run: git -C %s pull\n\n" "${repo_root}" >&2
+    printf "    Run: git -C %s pull\n\n" "${repo_root}"
+  else
+    # Ahead or diverged
+    printf "Version check: local changes ahead of or diverged from origin/main\n"
   fi
 
   return 0
