@@ -55,6 +55,9 @@ source "${LIB_DIR}/logging.sh"
 # shellcheck source=../../lib/utils.sh
 source "${LIB_DIR}/utils.sh"
 
+# shellcheck source=../../lib/version-check.sh
+source "${LIB_DIR}/version-check.sh"
+
 # -----------------------------------------------------------------------------
 # Help
 # -----------------------------------------------------------------------------
@@ -201,6 +204,7 @@ add_section() {
 # -----------------------------------------------------------------------------
 
 main() {
+  check_for_updates
   parse_args "$@"
 
   # Don't require logging for this script (no init_logging call)

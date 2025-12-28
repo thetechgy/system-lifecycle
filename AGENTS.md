@@ -13,7 +13,8 @@ linux/
 ├── lib/                    # Shared bash libraries (source these)
 │   ├── colors.sh           # Terminal colors (RED, GREEN, etc.)
 │   ├── logging.sh          # log_info, log_error, section, init_logging
-│   └── utils.sh            # command_exists, check_root, exit codes
+│   ├── utils.sh            # command_exists, check_root, exit codes
+│   └── version-check.sh    # check_for_updates (warns if behind origin/main)
 ├── ubuntu/                 # Ubuntu-specific
 │   ├── update/             # System update scripts
 │   ├── configure/          # Configuration scripts
@@ -84,6 +85,9 @@ All bash scripts must:
 
 **From colors.sh:**
 - `RED`, `GREEN`, `YELLOW`, `BLUE`, `NC` (no color)
+
+**From version-check.sh:**
+- `check_for_updates` - Warns if local repo is behind origin/main (call at start of main())
 
 ## Git Workflow
 

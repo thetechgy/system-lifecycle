@@ -71,6 +71,9 @@ source "${LIB_DIR}/logging.sh"
 # shellcheck source=../../lib/utils.sh
 source "${LIB_DIR}/utils.sh"
 
+# shellcheck source=../../lib/version-check.sh
+source "${LIB_DIR}/version-check.sh"
+
 # -----------------------------------------------------------------------------
 # Help and Version
 # -----------------------------------------------------------------------------
@@ -457,6 +460,7 @@ firmware_update() {
 # -----------------------------------------------------------------------------
 
 main() {
+  check_for_updates
   parse_args "$@"
   check_root
   init_logging "update-system"
