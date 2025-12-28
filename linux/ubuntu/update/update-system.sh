@@ -418,6 +418,12 @@ firmware_update() {
 
   section "Updating Firmware"
 
+  # Skip on WSL - firmware updates not applicable in virtualized environment
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    log_info "WSL detected - firmware updates not supported in virtualized environment"
+    return 0
+  fi
+
   if ! command_exists fwupdmgr; then
     log_info "Installing fwupd for firmware updates..."
     if DEBIAN_FRONTEND=noninteractive apt-get install -y fwupd 2>&1 | tee -a "${LOG_FILE}"; then
