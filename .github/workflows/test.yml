@@ -1,0 +1,30 @@
+name: Bats Tests
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - '**.sh'
+      - '**.bats'
+      - 'tests/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.sh'
+      - '**.bats'
+      - 'tests/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Bats
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+
+      - name: Run Bats tests
+        run: bats tests/

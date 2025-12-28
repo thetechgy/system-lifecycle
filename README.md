@@ -2,6 +2,8 @@
 
 Personal scripts for building, configuring, and maintaining Linux and Windows systems across their lifecycle.
 
+> **Note**: These scripts are created for my own use and reflect my personal preferences. You're welcome to use them or fork and adapt them to your needs, but **please review the code thoroughly before running** to understand what it will do to your system. I accept no liability for any damage or issues that may result from using these scripts.
+
 ## Repository Structure
 
 ```
@@ -165,6 +167,23 @@ Shell scripts are linted with ShellCheck:
 ```bash
 shellcheck linux/**/*.sh
 ```
+
+### Testing
+
+This project uses [Bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System) for testing:
+
+```bash
+# Install bats
+sudo apt-get install bats
+
+# Run all tests
+bats tests/
+
+# Run specific test file
+bats tests/lib/utils.bats
+```
+
+Tests are automatically run in CI on push to `develop` and PRs to `main`.
 
 ## License
 
