@@ -17,6 +17,8 @@
 #   --no-flatpak       Skip flatpak package updates
 #   --firmware         Enable firmware updates (opt-in)
 #   --clean            Use apt-get clean instead of autoclean
+#   --upgrade-nodejs   Upgrade Node.js via Snap (opt-in)
+#   --nodejs-version=N Specify Node.js major version (default: 20)
 #   -h, --help         Display this help message
 #   -v, --version      Display script version
 #
@@ -57,6 +59,8 @@ SKIP_SNAP=false
 SKIP_FLATPAK=false
 RUN_FIRMWARE=false
 RUN_CLEAN=false
+UPGRADE_NODEJS=false
+NODEJS_VERSION="20"
 
 # -----------------------------------------------------------------------------
 # Source Libraries
@@ -92,6 +96,8 @@ Options:
     --no-flatpak       Skip flatpak package updates
     --firmware         Enable firmware updates (requires fwupd)
     --clean            Use apt-get clean (remove ALL cached packages)
+    --upgrade-nodejs   Upgrade Node.js via Snap (opt-in)
+    --nodejs-version=N Specify Node.js major version (default: 20)
     -h, --help         Display this help message
     -v, --version      Display script version
 
@@ -101,6 +107,7 @@ Examples:
     sudo ${SCRIPT_NAME} --no-snap    # Skip snap updates
     sudo ${SCRIPT_NAME} --firmware   # Include firmware updates
     sudo ${SCRIPT_NAME} --clean      # Aggressive cache cleanup
+    sudo ${SCRIPT_NAME} --upgrade-nodejs  # Include Node.js upgrade
 
 Exit Codes:
     0 - Success
@@ -151,6 +158,14 @@ parse_args() {
         ;;
       --clean)
         RUN_CLEAN=true
+        shift
+        ;;
+      --upgrade-nodejs)
+        UPGRADE_NODEJS=true
+        shift
+        ;;
+      --nodejs-version=*)
+        NODEJS_VERSION="${1#*=}"
         shift
         ;;
       -h|--help)
@@ -301,6 +316,64 @@ apt_clean() {
     else
       log_warning "Package cache cleanup had issues (non-critical)"
     fi
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# Node.js Functions
+# -----------------------------------------------------------------------------
+
+nodejs_upgrade() {
+  if [[ "${UPGRADE_NODEJS}" != true ]]; then
+    return 0
+  fi
+
+  section "Upgrading Node.js"
+
+  # Check if snap is available
+  if ! command_exists snap; then
+    log_error "Snap is not installed. Cannot upgrade Node.js via Snap."
+    return 1
+  fi
+
+  # Get current Node.js version (if installed)
+  local current_version=""
+  local current_major=""
+  if command_exists node; then
+    current_version=$(node --version 2>/dev/null | sed 's/^v//')
+    current_major=$(echo "${current_version}" | cut -d. -f1)
+    log_info "Current Node.js version: v${current_version}"
+  else
+    log_info "Node.js is not installed, skipping upgrade"
+    return 0
+  fi
+
+  local target_major="${NODEJS_VERSION}"
+  log_info "Target Node.js version: ${target_major}.x (via Snap)"
+
+  # Skip if already at or above target version and using snap
+  if snap list node &>/dev/null; then
+    if [[ -n "${current_major}" ]] && [[ "${current_major}" -ge "${target_major}" ]]; then
+      log_success "Node.js is already at v${current_version} (>= ${target_major}.x)"
+      return 0
+    fi
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would run: snap install node --classic --channel=${target_major}"
+    return 0
+  fi
+
+  # Install/upgrade Node.js via Snap
+  log_info "Installing Node.js ${target_major}.x via Snap..."
+  if snap install node --classic --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
+    local new_version
+    new_version=$(/snap/bin/node --version 2>/dev/null)
+    log_success "Node.js upgraded to ${new_version} (via Snap)"
+    log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+  else
+    log_error "Failed to install Node.js via Snap"
+    return 1
   fi
 }
 
@@ -472,6 +545,10 @@ main() {
   log_info "Skip npm: ${SKIP_NPM}"
   log_info "Firmware updates: ${RUN_FIRMWARE}"
   log_info "Full cache clean: ${RUN_CLEAN}"
+  log_info "Upgrade Node.js: ${UPGRADE_NODEJS}"
+  if [[ "${UPGRADE_NODEJS}" == true ]]; then
+    log_info "Target Node.js version: ${NODEJS_VERSION}.x"
+  fi
 
   section "System Information"
   show_system_info
@@ -484,6 +561,10 @@ main() {
   # Package manager updates
   snap_update
   flatpak_update
+
+  # Node.js upgrade (opt-in, before npm updates)
+  nodejs_upgrade
+
   npm_update
 
   # Firmware updates (opt-in)
