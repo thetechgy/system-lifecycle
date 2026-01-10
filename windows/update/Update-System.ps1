@@ -673,18 +673,26 @@ function Update-WingetPackages {
     }
 
     Write-LogInfo 'Updating winget packages...'
-    try {
-        # Stream output in real-time instead of buffering (prevents appearing hung)
-        # --disable-interactivity prevents any prompts that could hang the script
-        winget upgrade --all --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
-            ForEach-Object {
-                if (Test-ShouldLogLine $_) {
-                    Write-LogInfo "  $_"
-                }
+    # Stream output in real-time instead of buffering (prevents appearing hung)
+    # --disable-interactivity prevents any prompts that could hang the script
+    winget upgrade --all --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
+        ForEach-Object {
+            if (Test-ShouldLogLine $_) {
+                Write-LogInfo "  $_"
             }
+        }
+    $wingetExitCode = $LASTEXITCODE
+
+    if ($wingetExitCode -eq 0) {
         Write-LogSuccess 'Winget packages updated'
-    } catch {
-        Write-LogWarning "Some winget packages could not be updated: $_"
+    } elseif ($wingetExitCode -eq 2147958015) {
+        # 0x80004005 - Often occurs when updating framework packages in use
+        Write-LogWarning "Some winget packages could not be updated (exit code: $wingetExitCode)"
+        Write-LogWarning 'This may occur when updating packages that are currently in use'
+        $Script:ExitCode = $ExitCodes.WingetFailed
+    } else {
+        Write-LogWarning "Winget completed with exit code: $wingetExitCode"
+        $Script:ExitCode = $ExitCodes.WingetFailed
     }
 }
 
