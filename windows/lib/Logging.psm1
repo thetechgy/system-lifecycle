@@ -316,6 +316,11 @@ function Test-ShouldLogLine {
         # Skip spinner/progress characters (single char lines like -, \, |, /)
         if ($Line -match '^\s*[-\\|/]\s*$') { return $false }
 
+        # Skip progress bar lines (garbled Unicode block elements + percentage)
+        # Pattern: lines ending with percentage or size that contain garbled Γû sequences
+        if ($Line -match 'Γû[êÆ].*\d+%\s*$') { return $false }
+        if ($Line -match 'Γû[êÆ].*\d+(\.\d+)?\s*(KB|MB|GB)\s*/') { return $false }
+
         # Skip ANSI escape sequence only lines
         if ($Line -match '^\s*(\x1b\[[0-9;]*m)*\s*$') { return $false }
 
