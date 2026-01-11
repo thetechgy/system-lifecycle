@@ -121,6 +121,97 @@ The `configure-bashrc.sh` script manages shell aliases in `~/.bashrc`:
 
 The script adds a managed section with markers, making it safe to run multiple times and easy to remove.
 
+## Workstation Installation
+
+The `install-workstation.sh` script provides complete workstation provisioning:
+
+```bash
+# Full installation (prompts for Ubuntu Pro token)
+sudo ./linux/ubuntu/install/install-workstation.sh
+
+# Preview changes
+sudo ./linux/ubuntu/install/install-workstation.sh --dry-run
+
+# Skip security hardening
+sudo ./linux/ubuntu/install/install-workstation.sh --skip-security
+
+# Security hardening only
+sudo ./linux/ubuntu/install/install-workstation.sh --security-only
+```
+
+### CIS Security Profiles
+
+The installer supports Ubuntu Security Guide (USG) with CIS benchmarks. Choose the appropriate profile:
+
+| Profile | Description | Use Case |
+|---------|-------------|----------|
+| `cis_level1_workstation` | Basic security hardening (default, recommended) | Personal workstations |
+| `cis_level2_workstation` | Stricter security controls | High-security workstations |
+| `cis_level1_server` | Basic server hardening | Personal servers |
+| `cis_level2_server` | Maximum server security | Production servers |
+
+```bash
+# Use Level 2 workstation profile
+sudo ./linux/ubuntu/install/install-workstation.sh --cis-profile=cis_level2_workstation
+```
+
+## Shared Libraries
+
+The `linux/lib/` directory contains reusable bash utilities:
+
+| Library | Purpose |
+|---------|---------|
+| `colors.sh` | Terminal color definitions |
+| `logging.sh` | Structured logging to file and console |
+| `utils.sh` | Common utilities and exit codes |
+| `apt.sh` | APT package management helpers |
+| `retry.sh` | Retry logic with exponential backoff |
+| `rollback.sh` | Backup and restore functionality |
+| `repositories.sh` | APT repository management |
+| `gnome-extensions.sh` | GNOME extension installation |
+| `config.sh` | Configuration file parsing |
+| `progress.sh` | Progress bar display |
+
+### Rollback Capability
+
+The rollback library provides disaster recovery functionality:
+
+```bash
+# In your scripts, source the library
+source "${LIB_DIR}/rollback.sh"
+
+# Create a restore point before making changes
+rollback_create_restore_point "pre-upgrade"
+
+# Backup individual files
+rollback_backup_file "/etc/ssh/sshd_config"
+
+# List available restore points
+rollback_list_restore_points
+
+# Restore from a point (use with caution)
+rollback_restore "pre-upgrade"
+```
+
+Restore points are stored in `/var/backups/system-lifecycle/`.
+
+### Retry with Exponential Backoff
+
+The retry library handles transient failures:
+
+```bash
+source "${LIB_DIR}/retry.sh"
+
+# Retry a command up to 3 times with exponential backoff
+retry_with_backoff 3 apt-get update
+
+# Simple retry with fixed delay (5 attempts, 2 second delay)
+retry_command 5 2 curl -fsSL https://example.com
+
+# Wait for a service to become available
+wait_for_service "snapd" 60 5  # service name, max wait, interval
+```
+
 ## Requirements
 
 - Ubuntu 24.04 LTS (or compatible Debian-based distribution)

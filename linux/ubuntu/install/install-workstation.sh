@@ -143,11 +143,10 @@ get_target_home() {
   local user="${1}"
   local home_dir
 
+  # Get home directory from passwd database (works for local and LDAP users)
   home_dir=$(getent passwd "${user}" | cut -d: -f6)
   if [[ -z "${home_dir}" ]]; then
-    home_dir=$(eval echo "~${user}")
-  fi
-  if [[ -z "${home_dir}" ]]; then
+    # Fallback to current user's HOME if user lookup fails
     home_dir="${HOME}"
   fi
 
@@ -312,6 +311,16 @@ parse_args() {
         ;;
       --cis-profile=*)
         CIS_PROFILE="${1#*=}"
+        # Validate CIS profile
+        case "${CIS_PROFILE}" in
+          cis_level1_workstation|cis_level2_workstation|cis_level1_server|cis_level2_server)
+            ;;
+          *)
+            echo "Error: Invalid CIS profile '${CIS_PROFILE}'" >&2
+            echo "Valid profiles: cis_level1_workstation, cis_level2_workstation, cis_level1_server, cis_level2_server" >&2
+            exit "${EXIT_INVALID_ARGS}"
+            ;;
+        esac
         shift
         ;;
       --no-audit)
@@ -568,7 +577,7 @@ usg_install() {
   section "Installing Ubuntu Security Guide"
 
   # Check if USG is already installed
-  if dpkg -l | grep -q "^ii.*usg "; then
+  if dpkg-query -W -f='${Status}' usg 2>/dev/null | grep -q "^install ok installed$"; then
     log_success "Ubuntu Security Guide is already installed"
     return 0
   fi
@@ -720,7 +729,10 @@ setup_microsoft_gpg() {
   log_info "Installing Microsoft GPG signing key..."
 
   local temp_gpg
-  temp_gpg=$(mktemp)
+  if ! temp_gpg=$(mktemp); then
+    log_error "Failed to create temporary file for GPG key"
+    return "${EXIT_APP_INSTALL_FAILED}"
+  fi
   if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > "${temp_gpg}" 2>&1 | tee -a "${LOG_FILE}"; then
     install -D -o root -g root -m 644 "${temp_gpg}" "${gpg_key}"
     rm -f "${temp_gpg}"
@@ -735,7 +747,7 @@ install_edge() {
   section "Installing Microsoft Edge"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*microsoft-edge-stable "; then
+  if dpkg-query -W -f='${Status}' microsoft-edge-stable 2>/dev/null | grep -q "^install ok installed$"; then
     local edge_version
     edge_version=$(microsoft-edge --version 2>/dev/null || echo "unknown")
     log_success "Microsoft Edge is already installed (${edge_version})"
@@ -791,7 +803,7 @@ install_vscode() {
   section "Installing Visual Studio Code"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*code "; then
+  if dpkg-query -W -f='${Status}' code 2>/dev/null | grep -q "^install ok installed$"; then
     local code_version
     code_version=$(code --version 2>/dev/null | head -1 || echo "unknown")
     log_success "Visual Studio Code is already installed (${code_version})"
@@ -847,7 +859,7 @@ install_discord() {
   section "Installing Discord"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*discord "; then
+  if dpkg-query -W -f='${Status}' discord 2>/dev/null | grep -q "^install ok installed$"; then
     local discord_version
     discord_version=$(discord --version 2>/dev/null | head -1 || echo "unknown")
     log_success "Discord is already installed (${discord_version})"
@@ -1031,7 +1043,10 @@ setup_microsoft_products_repo() {
 
   # Download and install Microsoft products GPG key
   local temp_gpg
-  temp_gpg=$(mktemp)
+  if ! temp_gpg=$(mktemp); then
+    log_error "Failed to create temporary file for GPG key"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
   if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > "${temp_gpg}" 2>&1 | tee -a "${LOG_FILE}"; then
     install -D -o root -g root -m 644 "${temp_gpg}" "${gpg_key}"
     rm -f "${temp_gpg}"
@@ -1060,7 +1075,7 @@ install_powershell() {
   section "Installing PowerShell"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*powershell "; then
+  if dpkg-query -W -f='${Status}' powershell 2>/dev/null | grep -q "^install ok installed$"; then
     local pwsh_version
     pwsh_version=$(pwsh --version 2>/dev/null || echo "unknown")
     log_success "PowerShell is already installed (${pwsh_version})"
@@ -1091,7 +1106,7 @@ install_github_cli() {
   section "Installing GitHub CLI"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*gh "; then
+  if dpkg-query -W -f='${Status}' gh 2>/dev/null | grep -q "^install ok installed$"; then
     local gh_version
     gh_version=$(gh --version 2>/dev/null | head -1 || echo "unknown")
     log_success "GitHub CLI is already installed (${gh_version})"
@@ -1119,7 +1134,7 @@ install_jq() {
   section "Installing jq"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*jq "; then
+  if dpkg-query -W -f='${Status}' jq 2>/dev/null | grep -q "^install ok installed$"; then
     local jq_version
     jq_version=$(jq --version 2>/dev/null || echo "unknown")
     log_success "jq is already installed (${jq_version})"
@@ -1147,7 +1162,7 @@ install_ripgrep() {
   section "Installing ripgrep"
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*ripgrep "; then
+  if dpkg-query -W -f='${Status}' ripgrep 2>/dev/null | grep -q "^install ok installed$"; then
     local rg_version
     rg_version=$(rg --version 2>/dev/null | head -1 || echo "unknown")
     log_success "ripgrep is already installed (${rg_version})"
@@ -1175,7 +1190,7 @@ install_fd() {
   section "Installing fd"
 
   # Check if already installed (package is fd-find)
-  if dpkg -l | grep -q "^ii.*fd-find "; then
+  if dpkg-query -W -f='${Status}' fd-find 2>/dev/null | grep -q "^install ok installed$"; then
     local fd_version
     fd_version=$(fd --version 2>/dev/null || echo "unknown")
     log_success "fd is already installed (${fd_version})"
@@ -1241,7 +1256,7 @@ install_dash_to_panel() {
   fi
 
   # Check if already installed
-  if dpkg -l | grep -q "^ii.*gnome-shell-extension-dash-to-panel "; then
+  if dpkg-query -W -f='${Status}' gnome-shell-extension-dash-to-panel 2>/dev/null | grep -q "^install ok installed$"; then
     log_success "Dash to Panel extension is already installed"
     GNOME_EXTENSIONS_INSTALLED=true
     # Apply configuration even if already installed
@@ -1384,7 +1399,10 @@ install_vitals() {
   # Download extension
   local download_url="https://extensions.gnome.org/download-extension/Vitals@CoreCoding.com.shell-extension.zip?version_tag=${version_tag}"
   local temp_zip
-  temp_zip=$(mktemp --suffix=.zip)
+  if ! temp_zip=$(mktemp --suffix=.zip); then
+    log_error "Failed to create temporary file for extension download"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
 
   if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_error "Failed to download Vitals extension"
@@ -1532,7 +1550,10 @@ install_awsm() {
   # Download extension
   local download_url="https://extensions.gnome.org/download-extension/another-window-session-manager@gmail.com.shell-extension.zip?version_tag=${version_tag}"
   local temp_zip
-  temp_zip=$(mktemp --suffix=.zip)
+  if ! temp_zip=$(mktemp --suffix=.zip); then
+    log_error "Failed to create temporary file for extension download"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
 
   if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_error "Failed to download AWSM extension"

@@ -29,18 +29,20 @@ retry_with_backoff() {
 
   local attempt=1
   local delay="${RETRY_INITIAL_DELAY}"
+  local exit_code=0
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
     log_info "Attempt ${attempt}/${max_attempts}: ${cmd[*]}"
 
-    if "${cmd[@]}"; then
+    # Execute command and capture exit code immediately
+    "${cmd[@]}" && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
       if [[ ${attempt} -gt 1 ]]; then
         log_success "Command succeeded on attempt ${attempt}"
       fi
       return 0
     fi
-
-    local exit_code=$?
 
     if [[ ${attempt} -eq ${max_attempts} ]]; then
       log_error "Command failed after ${max_attempts} attempts: ${cmd[*]}"
@@ -76,18 +78,20 @@ retry_command() {
   local cmd=("$@")
 
   local attempt=1
+  local exit_code=0
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
     log_info "Attempt ${attempt}/${max_attempts}: ${cmd[*]}"
 
-    if "${cmd[@]}"; then
+    # Execute command and capture exit code immediately
+    "${cmd[@]}" && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
       if [[ ${attempt} -gt 1 ]]; then
         log_success "Command succeeded on attempt ${attempt}"
       fi
       return 0
     fi
-
-    local exit_code=$?
 
     if [[ ${attempt} -eq ${max_attempts} ]]; then
       log_error "Command failed after ${max_attempts} attempts: ${cmd[*]}"
@@ -107,7 +111,8 @@ retry_command() {
 # Arguments:
 #   $1 - Maximum number of attempts
 #   $2 - Delay between attempts (seconds)
-#   $3 - Condition command (must return 0 when satisfied)
+#   $3 - Condition function name (must return 0 when satisfied)
+#        Must be a simple function/command name - no shell expressions
 #   $@ - Command to execute (remaining arguments)
 # Returns:
 #   0 when condition is met, 1 on timeout
@@ -118,6 +123,20 @@ retry_until() {
   shift 3
   local cmd=("$@")
 
+  # Security: Validate condition is a simple function/command name
+  # Reject anything that looks like shell injection
+  if [[ "${condition}" =~ [[:space:]\;\|\&\$\`\(\)\<\>\"\'\!] ]]; then
+    log_error "Invalid condition '${condition}': must be a simple function or command name"
+    log_error "Shell expressions are not allowed for security reasons"
+    return 1
+  fi
+
+  # Verify the condition is callable
+  if ! type "${condition}" &>/dev/null; then
+    log_error "Condition '${condition}' is not a valid function or command"
+    return 1
+  fi
+
   local attempt=1
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
@@ -126,8 +145,8 @@ retry_until() {
       "${cmd[@]}" || true
     fi
 
-    # Check condition
-    if eval "${condition}"; then
+    # Check condition - call directly without eval for security
+    if "${condition}"; then
       log_success "Condition met on attempt ${attempt}"
       return 0
     fi
@@ -172,22 +191,47 @@ retry_download() {
 
 # Wait for a service to become available
 # Arguments:
-#   $1 - Service check command (e.g., "systemctl is-active snapd")
+#   $1 - Service name (e.g., "snapd")
 #   $2 - (optional) Maximum wait time in seconds (default: 60)
 #   $3 - (optional) Check interval in seconds (default: 5)
 # Returns:
 #   0 when service is available, 1 on timeout
 wait_for_service() {
-  local check_cmd="${1}"
+  local service_name="${1}"
   local max_wait="${2:-60}"
   local interval="${3:-5}"
+
+  # Validate service name - only allow alphanumeric, dash, underscore, @ and .
+  if [[ ! "${service_name}" =~ ^[a-zA-Z0-9@._-]+$ ]]; then
+    log_error "Invalid service name '${service_name}'"
+    return 1
+  fi
 
   local max_attempts=$((max_wait / interval))
   if [[ ${max_attempts} -lt 1 ]]; then
     max_attempts=1
   fi
 
-  retry_until "${max_attempts}" "${interval}" "${check_cmd}"
+  log_info "Waiting for service '${service_name}' to become active..."
+
+  local attempt=1
+  while [[ ${attempt} -le ${max_attempts} ]]; do
+    if systemctl is-active --quiet "${service_name}" 2>/dev/null; then
+      log_success "Service '${service_name}' is active"
+      return 0
+    fi
+
+    if [[ ${attempt} -eq ${max_attempts} ]]; then
+      log_error "Service '${service_name}' not available after ${max_wait}s"
+      return 1
+    fi
+
+    log_info "Waiting for service (attempt ${attempt}/${max_attempts})..."
+    sleep "${interval}"
+    ((attempt++))
+  done
+
+  return 1
 }
 
 # Check if network is available
@@ -228,18 +272,20 @@ retry_with_jitter() {
   local cmd=("$@")
 
   local attempt=1
+  local exit_code=0
 
   while [[ ${attempt} -le ${max_attempts} ]]; do
     log_info "Attempt ${attempt}/${max_attempts}: ${cmd[*]}"
 
-    if "${cmd[@]}"; then
+    # Execute command and capture exit code immediately
+    "${cmd[@]}" && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
       if [[ ${attempt} -gt 1 ]]; then
         log_success "Command succeeded on attempt ${attempt}"
       fi
       return 0
     fi
-
-    local exit_code=$?
 
     if [[ ${attempt} -eq ${max_attempts} ]]; then
       log_error "Command failed after ${max_attempts} attempts: ${cmd[*]}"

@@ -42,32 +42,61 @@ repo_add_gpg_key() {
 
   log_info "Downloading GPG key from: ${key_url}"
 
-  # Create temp file securely
-  local temp_gpg
-  temp_gpg=$(mktemp)
-
-  # Download and dearmor the key
-  if [[ -n "${log_file}" ]]; then
-    if curl -fsSL "${key_url}" 2>>"${log_file}" | gpg --dearmor 2>>"${log_file}" > "${temp_gpg}"; then
-      # Install the key with proper permissions
-      if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
-        rm -f "${temp_gpg}"
-        log_success "GPG key installed: ${dest_path}"
-        return 0
-      fi
-    fi
-  else
-    if curl -fsSL "${key_url}" | gpg --dearmor > "${temp_gpg}" 2>/dev/null; then
-      # Install the key with proper permissions
-      if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
-        rm -f "${temp_gpg}"
-        log_success "GPG key installed: ${dest_path}"
-        return 0
-      fi
-    fi
+  # Create temp files securely
+  local temp_raw temp_gpg
+  if ! temp_raw=$(mktemp); then
+    log_error "Failed to create temporary file for GPG key download"
+    return 1
+  fi
+  if ! temp_gpg=$(mktemp); then
+    log_error "Failed to create temporary file for GPG key processing"
+    rm -f "${temp_raw}"
+    return 1
   fi
 
-  rm -f "${temp_gpg}"
+  # Download the key (separate step for better error handling)
+  local curl_exit=0
+  if [[ -n "${log_file}" ]]; then
+    curl -fsSL -o "${temp_raw}" "${key_url}" 2>>"${log_file}" || curl_exit=$?
+  else
+    curl -fsSL -o "${temp_raw}" "${key_url}" 2>/dev/null || curl_exit=$?
+  fi
+
+  if [[ ${curl_exit} -ne 0 ]]; then
+    log_error "Failed to download GPG key from: ${key_url} (exit code: ${curl_exit})"
+    rm -f "${temp_raw}" "${temp_gpg}"
+    return 1
+  fi
+
+  # Verify we downloaded something
+  if [[ ! -s "${temp_raw}" ]]; then
+    log_error "Downloaded GPG key is empty"
+    rm -f "${temp_raw}" "${temp_gpg}"
+    return 1
+  fi
+
+  # Dearmor the key (separate step for better error handling)
+  local gpg_exit=0
+  if [[ -n "${log_file}" ]]; then
+    gpg --dearmor < "${temp_raw}" > "${temp_gpg}" 2>>"${log_file}" || gpg_exit=$?
+  else
+    gpg --dearmor < "${temp_raw}" > "${temp_gpg}" 2>/dev/null || gpg_exit=$?
+  fi
+
+  if [[ ${gpg_exit} -ne 0 ]]; then
+    log_error "Failed to dearmor GPG key (exit code: ${gpg_exit})"
+    rm -f "${temp_raw}" "${temp_gpg}"
+    return 1
+  fi
+
+  # Install the key with proper permissions
+  if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
+    rm -f "${temp_raw}" "${temp_gpg}"
+    log_success "GPG key installed: ${dest_path}"
+    return 0
+  fi
+
+  rm -f "${temp_raw}" "${temp_gpg}"
   log_error "Failed to install GPG key: ${dest_path}"
   return 1
 }

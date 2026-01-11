@@ -218,7 +218,10 @@ gnome_extension_install() {
   # Download extension
   local download_url="https://extensions.gnome.org/download-extension/${uuid}.shell-extension.zip?version_tag=${version_tag}"
   local temp_zip
-  temp_zip=$(mktemp --suffix=.zip)
+  if ! temp_zip=$(mktemp --suffix=.zip); then
+    log_error "Failed to create temporary file for extension download"
+    return 1
+  fi
 
   if ! curl -fsSL -o "${temp_zip}" "${download_url}"; then
     log_error "Failed to download extension: ${uuid}"

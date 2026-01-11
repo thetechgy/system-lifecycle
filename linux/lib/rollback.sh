@@ -18,12 +18,13 @@ ROLLBACK_DIR="${ROLLBACK_DIR:-/var/backups/system-lifecycle}"
 # Create a restore point (snapshot of key system files)
 # Arguments:
 #   $1 - Restore point name (e.g., "pre-hardening")
-#   $2 - (optional) Additional directories to backup (space-separated)
+#   $@ - (optional) Additional directories to backup (each as separate argument)
 # Returns:
 #   0 on success, non-zero on failure
 rollback_create_restore_point() {
   local name="${1}"
-  local extra_dirs="${2:-}"
+  shift
+  local extra_dirs=("$@")
 
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
@@ -62,8 +63,8 @@ rollback_create_restore_point() {
   fi
 
   # Backup additional directories if specified
-  if [[ -n "${extra_dirs}" ]]; then
-    for dir in ${extra_dirs}; do
+  if [[ ${#extra_dirs[@]} -gt 0 ]]; then
+    for dir in "${extra_dirs[@]}"; do
       if [[ -d "${dir}" ]]; then
         local dir_name
         dir_name=$(echo "${dir}" | tr '/' '_')

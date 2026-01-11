@@ -226,7 +226,8 @@ apt_clean() {
 apt_is_installed() {
   local package="${1}"
 
-  if dpkg -l | grep -q "^ii.*${package} "; then
+  # Use dpkg-query for safe, exact package name matching (no regex injection)
+  if dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -q "^install ok installed$"; then
     return 0
   fi
   return 1
