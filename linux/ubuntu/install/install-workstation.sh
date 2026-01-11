@@ -123,7 +123,7 @@ Installs and configures:
   - Ubuntu Security Guide (USG) with CIS benchmarks
   - Microsoft Edge, Visual Studio Code, and Discord
   - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
-  - Developer tools (Node.js, PowerShell, GitHub CLI, jq)
+  - Developer tools (Node.js, PowerShell, GitHub CLI, ripgrep, fd, jq)
   - GNOME extensions (dash-to-panel, Vitals, AWSM)
   - Fastfetch system information tool
 
@@ -134,7 +134,7 @@ Options:
     --skip-ubuntu-pro          Skip Ubuntu Pro enrollment
     --ubuntu-pro-token=TOKEN   Provide Ubuntu Pro token (non-interactive)
     --skip-apps                Skip MS Edge and VS Code installation
-    --skip-devtools            Skip developer tools (Node.js, Claude CLI, Codex CLI, PowerShell, gh, jq)
+    --skip-devtools            Skip developer tools (Node.js, Claude CLI, Codex CLI, PowerShell, gh, ripgrep, fd, jq)
     --skip-extensions          Skip GNOME extension installation
     --skip-fastfetch           Skip fastfetch installation
     --security-only            Only run security hardening
@@ -1023,6 +1023,62 @@ install_jq() {
   fi
 }
 
+install_ripgrep() {
+  section "Installing ripgrep"
+
+  # Check if already installed
+  if dpkg -l | grep -q "^ii.*ripgrep "; then
+    local rg_version
+    rg_version=$(rg --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "ripgrep is already installed (${rg_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install ripgrep"
+    return 0
+  fi
+
+  # Install from Ubuntu repositories
+  log_info "Installing ripgrep..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep 2>&1 | tee -a "${LOG_FILE}"; then
+    local rg_version
+    rg_version=$(rg --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "ripgrep installed successfully (${rg_version})"
+  else
+    log_error "Failed to install ripgrep"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+install_fd() {
+  section "Installing fd"
+
+  # Check if already installed (package is fd-find)
+  if dpkg -l | grep -q "^ii.*fd-find "; then
+    local fd_version
+    fd_version=$(fd --version 2>/dev/null || echo "unknown")
+    log_success "fd is already installed (${fd_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install fd-find"
+    return 0
+  fi
+
+  # Install from Ubuntu repositories (package name is fd-find)
+  log_info "Installing fd (fd-find package)..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y fd-find 2>&1 | tee -a "${LOG_FILE}"; then
+    local fd_version
+    fd_version=$(fd --version 2>/dev/null || echo "unknown")
+    log_success "fd installed successfully (${fd_version})"
+  else
+    log_error "Failed to install fd"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
 # -----------------------------------------------------------------------------
 # GNOME Extension Functions
 # -----------------------------------------------------------------------------
@@ -1479,6 +1535,8 @@ main() {
       install_codex_cli
       install_powershell
       install_github_cli
+      install_ripgrep
+      install_fd
       install_jq
     fi
 
