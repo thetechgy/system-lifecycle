@@ -81,6 +81,8 @@ NODEJS_VERSION="20"
 REBOOT_REQUIRED=false
 GNOME_AVAILABLE=false
 GNOME_EXTENSIONS_INSTALLED=false
+TARGET_USER=""
+TARGET_HOME=""
 
 # -----------------------------------------------------------------------------
 # Source Libraries
@@ -123,6 +125,77 @@ readonly EXIT_EXTENSION_FAILED=9
 readonly EXIT_PREREQ_FAILED=10
 readonly EXIT_DEVTOOLS_FAILED=11
 readonly EXIT_UBUNTU_PRO_FAILED=12
+
+# -----------------------------------------------------------------------------
+# Target User Helpers
+# -----------------------------------------------------------------------------
+
+get_target_user() {
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    echo "${SUDO_USER}"
+    return 0
+  fi
+
+  echo "${USER}"
+}
+
+get_target_home() {
+  local user="${1}"
+  local home_dir
+
+  home_dir=$(getent passwd "${user}" | cut -d: -f6)
+  if [[ -z "${home_dir}" ]]; then
+    home_dir=$(eval echo "~${user}")
+  fi
+  if [[ -z "${home_dir}" ]]; then
+    home_dir="${HOME}"
+  fi
+
+  echo "${home_dir}"
+}
+
+run_as_target_user() {
+  local user="${1}"
+  shift
+
+  local uid
+  uid=$(id -u "${user}")
+  local home_dir
+  home_dir=$(get_target_home "${user}")
+  local base_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:${home_dir}/.local/bin"
+
+  if [[ "${user}" == "$(id -un)" ]]; then
+    HOME="${home_dir}" PATH="${base_path}:${PATH}" "$@"
+    return $?
+  fi
+
+  if command_exists sudo; then
+    sudo -u "${user}" -H env HOME="${home_dir}" \
+      PATH="${base_path}" \
+      XDG_RUNTIME_DIR="/run/user/${uid}" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" \
+      "$@"
+    return $?
+  fi
+
+  if command_exists runuser; then
+    runuser -u "${user}" -- env HOME="${home_dir}" \
+      PATH="${base_path}" \
+      XDG_RUNTIME_DIR="/run/user/${uid}" \
+      DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" \
+      "$@"
+    return $?
+  fi
+
+  log_error "Neither sudo nor runuser is available to run commands as ${user}"
+  return 1
+}
+
+target_user_command_exists() {
+  local cmd="${1}"
+
+  run_as_target_user "${TARGET_USER}" /bin/sh -c 'command -v "$1" >/dev/null 2>&1' _ "${cmd}"
+}
 
 # -----------------------------------------------------------------------------
 # Help and Version
@@ -362,11 +435,18 @@ pro_is_attached() {
   fi
 
   # Fallback: Parse text output
-  if pro status 2>/dev/null | grep -q "attached"; then
+  if pro status 2>/dev/null | awk -F: '
+      tolower($1) ~ /^[[:space:]]*attached/ {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
+        if (tolower($2) == "yes") exit 0
+        exit 1
+      }
+      END { exit 1 }
+    '; then
     return 0
-  else
-    return 1
   fi
+
+  return 1
 }
 
 prompt_ubuntu_pro_token() {
@@ -400,28 +480,27 @@ pro_attach_with_token() {
   log_info "Attempting to attach to Ubuntu Pro..."
 
   # Attempt to attach
-  if pro attach "${token}" --no-auto-enable 2>&1 | tee -a "${LOG_FILE}"; then
-    local exit_code="${PIPESTATUS[0]}"
+  local exit_code=0
+  set +o errexit
+  pro attach "${token}" --no-auto-enable 2>&1 | tee -a "${LOG_FILE}"
+  exit_code="${PIPESTATUS[0]}"
+  set -o errexit
 
-    case "${exit_code}" in
-      0)
-        log_success "Successfully attached to Ubuntu Pro"
-        return 0
-        ;;
-      2)
-        log_success "System is already attached to Ubuntu Pro"
-        return 0
-        ;;
-      *)
-        log_error "Failed to attach to Ubuntu Pro (exit code: ${exit_code})"
-        log_error "Please verify your token is valid and try again"
-        return "${EXIT_UBUNTU_PRO_FAILED}"
-        ;;
-    esac
-  else
-    log_error "Failed to attach to Ubuntu Pro"
-    return "${EXIT_UBUNTU_PRO_FAILED}"
-  fi
+  case "${exit_code}" in
+    0)
+      log_success "Successfully attached to Ubuntu Pro"
+      return 0
+      ;;
+    2)
+      log_success "System is already attached to Ubuntu Pro"
+      return 0
+      ;;
+    *)
+      log_error "Failed to attach to Ubuntu Pro (exit code: ${exit_code})"
+      log_error "Please verify your token is valid and try again"
+      return "${EXIT_UBUNTU_PRO_FAILED}"
+      ;;
+  esac
 }
 
 pro_enroll() {
@@ -862,15 +941,15 @@ install_claude_cli() {
   section "Installing Claude Code CLI"
 
   # Check if already installed
-  if command_exists claude; then
+  if target_user_command_exists claude; then
     local claude_version
-    claude_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-    log_success "Claude Code CLI is already installed (${claude_version})"
+    claude_version=$(run_as_target_user "${TARGET_USER}" claude --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "Claude Code CLI is already installed for ${TARGET_USER} (${claude_version})"
     return 0
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would install Claude Code CLI from official installer"
+    log_info "[DRY-RUN] Would install Claude Code CLI for user: ${TARGET_USER}"
     return 0
   fi
 
@@ -878,15 +957,17 @@ install_claude_cli() {
   log_info "Installing Claude Code CLI..."
   log_info "Downloading official installer from Anthropic..."
 
-  if curl -fsSL https://storage.googleapis.com/claudeai/claude-cli/install.sh | sh 2>&1 | tee -a "${LOG_FILE}"; then
+  if run_as_target_user "${TARGET_USER}" /bin/sh -c \
+    'curl -fsSL https://storage.googleapis.com/claudeai/claude-cli/install.sh | sh' \
+    2>&1 | tee -a "${LOG_FILE}"; then
     # Verify installation
-    if command_exists claude; then
+    if target_user_command_exists claude; then
       local claude_version
-      claude_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
-      log_success "Claude Code CLI installed successfully (${claude_version})"
-      log_info "Claude CLI installed to: ~/.local/bin/claude"
+      claude_version=$(run_as_target_user "${TARGET_USER}" claude --version 2>/dev/null | head -1 || echo "unknown")
+      log_success "Claude Code CLI installed successfully for ${TARGET_USER} (${claude_version})"
+      log_info "Claude CLI installed to: ${TARGET_HOME}/.local/bin/claude"
     else
-      log_error "Claude CLI installation completed but command not found"
+      log_error "Claude CLI installation completed but command not found for ${TARGET_USER}"
       return "${EXIT_DEVTOOLS_FAILED}"
     fi
   else
@@ -899,21 +980,21 @@ install_codex_cli() {
   section "Installing OpenAI Codex CLI"
 
   # Check if already installed
-  if npm list -g @openai/codex &>/dev/null; then
+  if target_user_command_exists npm && run_as_target_user "${TARGET_USER}" npm list -g @openai/codex &>/dev/null; then
     local codex_version
-    codex_version=$(codex --version 2>/dev/null || echo "unknown")
-    log_success "OpenAI Codex CLI is already installed (${codex_version})"
+    codex_version=$(run_as_target_user "${TARGET_USER}" codex --version 2>/dev/null || echo "unknown")
+    log_success "OpenAI Codex CLI is already installed for ${TARGET_USER} (${codex_version})"
     return 0
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would install @openai/codex via npm"
+    log_info "[DRY-RUN] Would install @openai/codex via npm for user: ${TARGET_USER}"
     return 0
   fi
 
   # Check if npm is available
-  if ! command_exists npm; then
-    log_error "npm is not available - cannot install Codex CLI"
+  if ! target_user_command_exists npm; then
+    log_error "npm is not available for ${TARGET_USER} - cannot install Codex CLI"
     log_error "Node.js installation may have failed"
     log_info "Use --skip-devtools to skip this installation"
     return "${EXIT_DEVTOOLS_FAILED}"
@@ -921,10 +1002,10 @@ install_codex_cli() {
 
   # Install Codex CLI via npm
   log_info "Installing OpenAI Codex CLI via npm..."
-  if npm install -g @openai/codex 2>&1 | tee -a "${LOG_FILE}"; then
+  if run_as_target_user "${TARGET_USER}" npm install -g @openai/codex 2>&1 | tee -a "${LOG_FILE}"; then
     local codex_version
-    codex_version=$(codex --version 2>/dev/null || echo "unknown")
-    log_success "OpenAI Codex CLI installed successfully (${codex_version})"
+    codex_version=$(run_as_target_user "${TARGET_USER}" codex --version 2>/dev/null || echo "unknown")
+    log_success "OpenAI Codex CLI installed successfully for ${TARGET_USER} (${codex_version})"
   else
     log_error "Failed to install OpenAI Codex CLI"
     return "${EXIT_DEVTOOLS_FAILED}"
@@ -1122,6 +1203,35 @@ install_fd() {
 # GNOME Extension Functions
 # -----------------------------------------------------------------------------
 
+ensure_extension_dependencies() {
+  local missing=()
+
+  if ! command_exists curl; then
+    missing+=("curl")
+  fi
+  if ! command_exists jq; then
+    missing+=("jq")
+  fi
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install extension dependencies: ${missing[*]}"
+    return 0
+  fi
+
+  log_info "Installing extension dependencies: ${missing[*]}"
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Extension dependencies installed: ${missing[*]}"
+    return 0
+  fi
+
+  log_error "Failed to install extension dependencies: ${missing[*]}"
+  return "${EXIT_EXTENSION_FAILED}"
+}
+
 install_dash_to_panel() {
   section "Installing GNOME Dash to Panel Extension"
 
@@ -1180,7 +1290,7 @@ configure_dash_to_panel() {
   # Enable the extension
   if command_exists gnome-extensions; then
     log_info "Enabling dash-to-panel extension..."
-    if gnome-extensions enable dash-to-panel@jderose9.github.com 2>&1 | tee -a "${LOG_FILE}"; then
+    if run_as_target_user "${TARGET_USER}" gnome-extensions enable dash-to-panel@jderose9.github.com 2>&1 | tee -a "${LOG_FILE}"; then
       log_success "Dash-to-panel extension enabled"
     else
       log_warning "Could not enable extension automatically - may need manual activation"
@@ -1189,12 +1299,16 @@ configure_dash_to_panel() {
 
   # Load configuration
   log_info "Loading dash-to-panel configuration..."
-  if dconf load /org/gnome/shell/extensions/dash-to-panel/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
-    log_success "Dash-to-panel configuration applied successfully"
-    log_info "Configuration will take effect after GNOME Shell restart or logout/login"
-    log_info "To restart GNOME Shell: Press Alt+F2, type 'r', and press Enter"
+  if command_exists dconf; then
+    if run_as_target_user "${TARGET_USER}" dconf load /org/gnome/shell/extensions/dash-to-panel/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Dash-to-panel configuration applied successfully"
+      log_info "Configuration will take effect after GNOME Shell restart or logout/login"
+      log_info "To restart GNOME Shell: Press Alt+F2, type 'r', and press Enter"
+    else
+      log_warning "Failed to load dash-to-panel configuration (non-critical)"
+    fi
   else
-    log_warning "Failed to load dash-to-panel configuration (non-critical)"
+    log_warning "dconf command not found - skipping dash-to-panel configuration"
   fi
 }
 
@@ -1215,29 +1329,41 @@ install_vitals() {
     return 0
   fi
 
+  if ! command_exists gnome-extensions; then
+    log_error "gnome-extensions command not found - cannot install Vitals"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
   # Check if already installed
-  if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+  if run_as_target_user "${TARGET_USER}" gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
     log_success "Vitals extension is already installed"
     configure_vitals
     return 0
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
+    ensure_extension_dependencies
     log_info "[DRY-RUN] Would install Vitals extension from GNOME Extensions"
     log_info "[DRY-RUN] Would configure Vitals from configs/vitals.dconf"
     return 0
   fi
 
+  ensure_extension_dependencies || return "${EXIT_EXTENSION_FAILED}"
+
   # Get GNOME Shell version for API query
   local gnome_version
-  gnome_version=$(gnome-shell --version | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
+  gnome_version=$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1 || true)
+  if [[ -z "${gnome_version}" ]]; then
+    log_error "Failed to detect GNOME Shell version"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
 
   log_info "Detected GNOME Shell version: ${gnome_version}"
   log_info "Downloading Vitals extension from extensions.gnome.org..."
 
   # Query API for correct version
   local extension_info
-  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=Vitals@CoreCoding.com")
+  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=Vitals@CoreCoding.com" 2>/dev/null || true)
 
   if [[ -z "${extension_info}" ]]; then
     log_error "Failed to query GNOME Extensions API"
@@ -1246,7 +1372,7 @@ install_vitals() {
 
   # Extract version_tag for current GNOME Shell version
   local version_tag
-  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null)
+  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null || true)
 
   if [[ -z "${version_tag}" || "${version_tag}" == "null" ]]; then
     log_error "Vitals extension not available for GNOME Shell ${gnome_version}"
@@ -1268,7 +1394,7 @@ install_vitals() {
 
   # Install extension using gnome-extensions
   log_info "Installing Vitals extension..."
-  if gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
+  if run_as_target_user "${TARGET_USER}" gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "Vitals extension installed successfully"
     rm -f "${temp_zip}"
 
@@ -1300,20 +1426,28 @@ configure_vitals() {
   log_info "Configuring Vitals extension..."
 
   # Enable the extension first
-  if gnome-extensions enable Vitals@CoreCoding.com 2>&1 | tee -a "${LOG_FILE}"; then
-    log_success "Vitals extension enabled"
+  if command_exists gnome-extensions; then
+    if run_as_target_user "${TARGET_USER}" gnome-extensions enable Vitals@CoreCoding.com 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Vitals extension enabled"
+    else
+      log_warning "Failed to enable Vitals extension (may need manual activation)"
+    fi
   else
-    log_warning "Failed to enable Vitals extension (may need manual activation)"
+    log_warning "gnome-extensions command not found - cannot enable Vitals"
   fi
 
   # Load dconf configuration
-  if dconf load /org/gnome/shell/extensions/vitals/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
-    log_success "Vitals configuration applied"
-    log_info "Configuration will take effect after GNOME Shell restart (Alt+F2, type 'r', press Enter)"
-    log_info "Or logout/login for changes to take effect"
+  if command_exists dconf; then
+    if run_as_target_user "${TARGET_USER}" dconf load /org/gnome/shell/extensions/vitals/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Vitals configuration applied"
+      log_info "Configuration will take effect after GNOME Shell restart (Alt+F2, type 'r', press Enter)"
+      log_info "Or logout/login for changes to take effect"
+    else
+      log_warning "Failed to load Vitals configuration"
+      return 1
+    fi
   else
-    log_warning "Failed to load Vitals configuration"
-    return 1
+    log_warning "dconf command not found - skipping Vitals configuration"
   fi
 }
 
@@ -1334,6 +1468,19 @@ install_awsm() {
     return 0
   fi
 
+  if ! command_exists gnome-extensions; then
+    log_error "gnome-extensions command not found - cannot install AWSM"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    ensure_extension_dependencies
+    log_info "[DRY-RUN] Would install AWSM dependencies (procps, libglib2.0-bin, libgtop2-dev)..."
+    log_info "[DRY-RUN] Would install AWSM extension from GNOME Extensions"
+    log_info "[DRY-RUN] Would enable another-window-session-manager@gmail.com extension"
+    return 0
+  fi
+
   # Install required dependencies first
   log_info "Installing AWSM dependencies (procps, libglib2.0-bin, libgtop2-dev)..."
   if DEBIAN_FRONTEND=noninteractive apt-get install -y procps libglib2.0-bin libgtop2-dev 2>&1 | tee -a "${LOG_FILE}"; then
@@ -1343,28 +1490,28 @@ install_awsm() {
   fi
 
   # Check if already installed
-  if gnome-extensions list 2>/dev/null | grep -q "another-window-session-manager@gmail.com"; then
+  if run_as_target_user "${TARGET_USER}" gnome-extensions list 2>/dev/null | grep -q "another-window-session-manager@gmail.com"; then
     log_success "AWSM extension is already installed"
     enable_awsm
     return 0
   fi
 
-  if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would install AWSM extension from GNOME Extensions"
-    log_info "[DRY-RUN] Would enable another-window-session-manager@gmail.com extension"
-    return 0
-  fi
+  ensure_extension_dependencies || return "${EXIT_EXTENSION_FAILED}"
 
   # Get GNOME Shell version for API query
   local gnome_version
-  gnome_version=$(gnome-shell --version | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
+  gnome_version=$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1 || true)
+  if [[ -z "${gnome_version}" ]]; then
+    log_error "Failed to detect GNOME Shell version"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
 
   log_info "Detected GNOME Shell version: ${gnome_version}"
   log_info "Downloading AWSM extension from extensions.gnome.org..."
 
   # Query API for correct version
   local extension_info
-  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=another-window-session-manager@gmail.com")
+  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=another-window-session-manager@gmail.com" 2>/dev/null || true)
 
   if [[ -z "${extension_info}" ]]; then
     log_error "Failed to query GNOME Extensions API"
@@ -1373,7 +1520,7 @@ install_awsm() {
 
   # Extract version_tag for current GNOME Shell version
   local version_tag
-  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null)
+  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null || true)
 
   if [[ -z "${version_tag}" || "${version_tag}" == "null" ]]; then
     log_error "AWSM extension not available for GNOME Shell ${gnome_version}"
@@ -1395,7 +1542,7 @@ install_awsm() {
 
   # Install extension using gnome-extensions
   log_info "Installing AWSM extension..."
-  if gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
+  if run_as_target_user "${TARGET_USER}" gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "AWSM extension installed successfully"
     rm -f "${temp_zip}"
 
@@ -1417,7 +1564,7 @@ enable_awsm() {
   log_info "Enabling AWSM extension..."
 
   # Enable the extension
-  if gnome-extensions enable another-window-session-manager@gmail.com 2>&1 | tee -a "${LOG_FILE}"; then
+  if run_as_target_user "${TARGET_USER}" gnome-extensions enable another-window-session-manager@gmail.com 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "AWSM extension enabled"
     log_info "AWSM allows you to save and restore window sessions across reboots"
     log_info "Access AWSM via the panel indicator to save/restore sessions"
@@ -1463,8 +1610,8 @@ configure_fastfetch() {
   section "Configuring Fastfetch"
 
   local config_src="${CONFIG_DIR}/fastfetch.jsonc"
-  local config_dest="${HOME}/.config/fastfetch/config.jsonc"
-  local config_dir="${HOME}/.config/fastfetch"
+  local config_dest="${TARGET_HOME}/.config/fastfetch/config.jsonc"
+  local config_dir="${TARGET_HOME}/.config/fastfetch"
 
   if [[ ! -f "${config_src}" ]]; then
     log_warning "Fastfetch config template not found: ${config_src}"
@@ -1475,6 +1622,7 @@ configure_fastfetch() {
   if [[ "${DRY_RUN}" == true ]]; then
     log_info "[DRY-RUN] Would create directory: ${config_dir}"
     log_info "[DRY-RUN] Would copy config: ${config_src} -> ${config_dest}"
+    log_info "[DRY-RUN] Would set ownership to: ${TARGET_USER}"
     return 0
   fi
 
@@ -1495,11 +1643,14 @@ configure_fastfetch() {
   log_info "Deploying fastfetch configuration..."
   if cp "${config_src}" "${config_dest}"; then
     chmod 644 "${config_dest}"
+    local target_group
+    target_group=$(id -gn "${TARGET_USER}")
+    chown -R "${TARGET_USER}:${target_group}" "${config_dir}"
     log_success "Fastfetch configuration deployed"
 
     # Test fastfetch
     log_info "Testing fastfetch configuration..."
-    if fastfetch 2>&1 | tee -a "${LOG_FILE}"; then
+    if run_as_target_user "${TARGET_USER}" fastfetch 2>&1 | tee -a "${LOG_FILE}"; then
       log_success "Fastfetch is working correctly"
     else
       log_warning "Fastfetch test had issues (non-critical)"
@@ -1520,8 +1671,14 @@ main() {
   check_root
   init_logging "install-workstation"
 
+  TARGET_USER=$(get_target_user)
+  TARGET_HOME=$(get_target_home "${TARGET_USER}")
+  readonly TARGET_USER TARGET_HOME
+
   log_info "Starting workstation installation..."
   log_info "Dry-run mode: ${DRY_RUN}"
+  log_info "Target user: ${TARGET_USER}"
+  log_info "Target home: ${TARGET_HOME}"
   log_info "Skip security: ${SKIP_SECURITY}"
   log_info "Skip apps: ${SKIP_APPS}"
   log_info "Skip devtools: ${SKIP_DEVTOOLS}"

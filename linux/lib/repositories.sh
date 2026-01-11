@@ -47,12 +47,23 @@ repo_add_gpg_key() {
   temp_gpg=$(mktemp)
 
   # Download and dearmor the key
-  if curl -fsSL "${key_url}" | gpg --dearmor > "${temp_gpg}" 2>/dev/null; then
-    # Install the key with proper permissions
-    if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
-      rm -f "${temp_gpg}"
-      log_success "GPG key installed: ${dest_path}"
-      return 0
+  if [[ -n "${log_file}" ]]; then
+    if curl -fsSL "${key_url}" 2>>"${log_file}" | gpg --dearmor 2>>"${log_file}" > "${temp_gpg}"; then
+      # Install the key with proper permissions
+      if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
+        rm -f "${temp_gpg}"
+        log_success "GPG key installed: ${dest_path}"
+        return 0
+      fi
+    fi
+  else
+    if curl -fsSL "${key_url}" | gpg --dearmor > "${temp_gpg}" 2>/dev/null; then
+      # Install the key with proper permissions
+      if install -D -o root -g root -m 644 "${temp_gpg}" "${dest_path}"; then
+        rm -f "${temp_gpg}"
+        log_success "GPG key installed: ${dest_path}"
+        return 0
+      fi
     fi
   fi
 

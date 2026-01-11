@@ -27,8 +27,9 @@ progress_start() {
   _PROGRESS_TITLE="${2:-Progress}"
   _PROGRESS_START_TIME=$(date +%s)
 
-  printf "${BLUE:-}[%s]${NC:-} Starting: %s (0/%d)\n" \
-    "${_PROGRESS_TITLE}" "${_PROGRESS_TITLE}" "${_PROGRESS_TOTAL}"
+  printf '%b[%s]%b Starting: %s (0/%d)\n' \
+    "${BLUE:-}" "${_PROGRESS_TITLE}" "${NC:-}" \
+    "${_PROGRESS_TITLE}" "${_PROGRESS_TOTAL}"
 }
 
 # Update progress
@@ -54,13 +55,13 @@ progress_update() {
   for ((i=0; i<empty; i++)); do bar+="░"; done
 
   if [[ -n "${description}" ]]; then
-    printf "\r${BLUE:-}[%s]${NC:-} [%s] %3d%% (%d/%d) %s\033[K\n" \
-      "${_PROGRESS_TITLE}" "${bar}" "${percent}" \
-      "${_PROGRESS_CURRENT}" "${_PROGRESS_TOTAL}" "${description}"
+    printf '\r%b[%s]%b [%s] %3d%% (%d/%d) %s\033[K\n' \
+      "${BLUE:-}" "${_PROGRESS_TITLE}" "${NC:-}" \
+      "${bar}" "${percent}" "${_PROGRESS_CURRENT}" "${_PROGRESS_TOTAL}" "${description}"
   else
-    printf "\r${BLUE:-}[%s]${NC:-} [%s] %3d%% (%d/%d)\033[K" \
-      "${_PROGRESS_TITLE}" "${bar}" "${percent}" \
-      "${_PROGRESS_CURRENT}" "${_PROGRESS_TOTAL}"
+    printf '\r%b[%s]%b [%s] %3d%% (%d/%d)\033[K' \
+      "${BLUE:-}" "${_PROGRESS_TITLE}" "${NC:-}" \
+      "${bar}" "${percent}" "${_PROGRESS_CURRENT}" "${_PROGRESS_TOTAL}"
   fi
 }
 
@@ -76,8 +77,8 @@ progress_complete() {
   local elapsed_str
   elapsed_str=$(format_duration "${elapsed}")
 
-  printf "\r${GREEN:-}[%s]${NC:-} %s (%d/%d) - %s\033[K\n" \
-    "${_PROGRESS_TITLE}" "${message}" \
+  printf '\r%b[%s]%b %s (%d/%d) - %s\033[K\n' \
+    "${GREEN:-}" "${_PROGRESS_TITLE}" "${NC:-}" "${message}" \
     "${_PROGRESS_TOTAL}" "${_PROGRESS_TOTAL}" "${elapsed_str}"
 
   # Reset state
@@ -119,10 +120,11 @@ phase_header() {
   local description="${3}"
 
   printf "\n"
-  printf "${BOLD:-}${BLUE:-}╔════════════════════════════════════════════════════════════╗${NC:-}\n"
-  printf "${BOLD:-}${BLUE:-}║${NC:-}  ${BOLD:-}Phase %d/%d: %-46s${BLUE:-}║${NC:-}\n" \
-    "${current}" "${total}" "${description}"
-  printf "${BOLD:-}${BLUE:-}╚════════════════════════════════════════════════════════════╝${NC:-}\n"
+  printf '%b\n' "${BOLD:-}${BLUE:-}╔════════════════════════════════════════════════════════════╗${NC:-}"
+  printf '%b║%b  %bPhase %d/%d: %-46s%b║%b\n' \
+    "${BOLD:-}${BLUE:-}" "${NC:-}" "${BOLD:-}" \
+    "${current}" "${total}" "${description}" "${BLUE:-}" "${NC:-}"
+  printf '%b\n' "${BOLD:-}${BLUE:-}╚════════════════════════════════════════════════════════════╝${NC:-}"
   printf "\n"
 }
 
@@ -133,9 +135,9 @@ phase_header() {
 #   summary_display "Applications:3" "Dev Tools:8" "Extensions:2"
 summary_display() {
   printf "\n"
-  printf "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}\n"
-  printf "${BOLD:-}${GREEN:-}                    INSTALLATION SUMMARY${NC:-}\n"
-  printf "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}\n"
+  printf '%b\n' "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}"
+  printf '%b\n' "${BOLD:-}${GREEN:-}                    INSTALLATION SUMMARY${NC:-}"
+  printf '%b\n' "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}"
   printf "\n"
 
   for item in "$@"; do
@@ -145,7 +147,7 @@ summary_display() {
   done
 
   printf "\n"
-  printf "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}\n"
+  printf '%b\n' "${BOLD:-}${GREEN:-}═══════════════════════════════════════════════════════════════${NC:-}"
 }
 
 # Display next steps after installation
@@ -153,7 +155,7 @@ summary_display() {
 #   $@ - List of next steps (each as a separate argument)
 summary_next_steps() {
   printf "\n"
-  printf "${BOLD:-}Next Steps:${NC:-}\n"
+  printf '%bNext Steps:%b\n' "${BOLD:-}" "${NC:-}"
 
   local step_num=1
   for step in "$@"; do

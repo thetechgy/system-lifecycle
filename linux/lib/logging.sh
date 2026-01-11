@@ -52,10 +52,10 @@ log() {
   # Log to console (unless quiet mode)
   if [[ "${QUIET}" != true ]]; then
     case "${level}" in
-      INFO)    printf "${BLUE:-}[%s]${NC:-} %s\n" "${level}" "${message}" ;;
-      SUCCESS) printf "${GREEN:-}[%s]${NC:-} %s\n" "${level}" "${message}" ;;
-      WARNING) printf "${YELLOW:-}[%s]${NC:-} %s\n" "${level}" "${message}" >&2 ;;
-      ERROR)   printf "${RED:-}[%s]${NC:-} %s\n" "${level}" "${message}" >&2 ;;
+      INFO)    printf '%b[%s]%b %s\n' "${BLUE:-}" "${level}" "${NC:-}" "${message}" ;;
+      SUCCESS) printf '%b[%s]%b %s\n' "${GREEN:-}" "${level}" "${NC:-}" "${message}" ;;
+      WARNING) printf '%b[%s]%b %s\n' "${YELLOW:-}" "${level}" "${NC:-}" "${message}" >&2 ;;
+      ERROR)   printf '%b[%s]%b %s\n' "${RED:-}" "${level}" "${NC:-}" "${message}" >&2 ;;
       *)       printf "[%s] %s\n" "${level}" "${message}" ;;
     esac
   fi
@@ -74,9 +74,9 @@ section() {
   local title="${1}"
 
   if [[ "${QUIET}" != true ]]; then
-    printf "\n${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}\n"
-    printf "${BLUE:-}  %s${NC:-}\n" "${title}"
-    printf "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}\n"
+    printf '\n%b\n' "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}"
+    printf '%b  %s%b\n' "${BLUE:-}" "${title}" "${NC:-}"
+    printf '%b\n' "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}"
   fi
 
   log_info "=== ${title} ==="

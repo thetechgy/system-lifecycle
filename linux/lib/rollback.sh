@@ -302,13 +302,14 @@ rollback_cleanup() {
   log_info "Cleaning up old restore points (keeping ${keep} most recent)..."
 
   local count=0
-  for rp in $(ls -dt "${restore_points_dir}"/* 2>/dev/null); do
+  while IFS= read -r -d '' entry; do
+    local rp="${entry#* }"
     ((count++))
     if [[ ${count} -gt ${keep} ]]; then
       log_info "Removing old restore point: ${rp}"
       rm -rf "${rp}"
     fi
-  done
+  done < <(find "${restore_points_dir}" -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\0' 2>/dev/null | sort -z -nr)
 
   log_success "Cleanup completed"
 }

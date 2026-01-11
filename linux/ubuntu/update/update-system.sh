@@ -366,8 +366,13 @@ nodejs_upgrade() {
   local target_major="${NODEJS_VERSION}"
   log_info "Target Node.js version: ${target_major}.x (via Snap)"
 
-  # Skip if already at or above target version and using snap
+  local snap_installed=false
   if snap list node &>/dev/null; then
+    snap_installed=true
+  fi
+
+  # Skip if already at or above target version and using snap
+  if [[ "${snap_installed}" == true ]]; then
     if [[ -n "${current_major}" ]] && [[ "${current_major}" -ge "${target_major}" ]]; then
       log_success "Node.js is already at v${current_version} (>= ${target_major}.x)"
       return 0
@@ -375,20 +380,37 @@ nodejs_upgrade() {
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: snap install node --classic --channel=${target_major}"
+    if [[ "${snap_installed}" == true ]]; then
+      log_info "[DRY-RUN] Would run: snap refresh node --channel=${target_major}"
+    else
+      log_info "[DRY-RUN] Would run: snap install node --classic --channel=${target_major}"
+    fi
     return 0
   fi
 
   # Install/upgrade Node.js via Snap
-  log_info "Installing Node.js ${target_major}.x via Snap..."
-  if snap install node --classic --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
-    local new_version
-    new_version=$(/snap/bin/node --version 2>/dev/null)
-    log_success "Node.js upgraded to ${new_version} (via Snap)"
-    log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+  if [[ "${snap_installed}" == true ]]; then
+    log_info "Refreshing Node.js ${target_major}.x via Snap..."
+    if snap refresh node --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
+      local new_version
+      new_version=$(/snap/bin/node --version 2>/dev/null || node --version 2>/dev/null || echo "unknown")
+      log_success "Node.js upgraded to ${new_version} (via Snap)"
+      log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+    else
+      log_error "Failed to refresh Node.js via Snap"
+      return 1
+    fi
   else
-    log_error "Failed to install Node.js via Snap"
-    return 1
+    log_info "Installing Node.js ${target_major}.x via Snap..."
+    if snap install node --classic --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
+      local new_version
+      new_version=$(/snap/bin/node --version 2>/dev/null || node --version 2>/dev/null || echo "unknown")
+      log_success "Node.js upgraded to ${new_version} (via Snap)"
+      log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+    else
+      log_error "Failed to install Node.js via Snap"
+      return 1
+    fi
   fi
 }
 

@@ -244,9 +244,8 @@ config_apply() {
     if config_has "${key}"; then
       local value
       value=$(config_get "${key}")
-      # Use indirect assignment
-      printf -v "${var_name}" '%s' "${value}"
-      export "${var_name}"
+      # Export while preserving the resolved variable name/value.
+      export "${var_name}=${value}"
     fi
   done
 }
