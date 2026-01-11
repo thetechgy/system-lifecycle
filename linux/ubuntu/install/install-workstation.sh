@@ -86,6 +86,21 @@ GNOME_EXTENSIONS_INSTALLED=false
 # Source Libraries
 # -----------------------------------------------------------------------------
 
+# Helper to check library exists before sourcing
+_check_lib() {
+  local lib="${1}"
+  if [[ ! -f "${lib}" ]]; then
+    echo "ERROR: Required library not found: ${lib}" >&2
+    echo "Ensure the script is run from within the system-lifecycle repository." >&2
+    exit 1
+  fi
+}
+
+_check_lib "${LIB_DIR}/colors.sh"
+_check_lib "${LIB_DIR}/logging.sh"
+_check_lib "${LIB_DIR}/utils.sh"
+_check_lib "${LIB_DIR}/version-check.sh"
+
 # shellcheck source=../../lib/colors.sh
 source "${LIB_DIR}/colors.sh"
 
@@ -317,7 +332,7 @@ check_prerequisites() {
   if pgrep -x gnome-shell >/dev/null 2>&1; then
     GNOME_AVAILABLE=true
     local gnome_version
-    gnome_version=$(gnome-shell --version 2>/dev/null | grep -oP '\d+\.\d+' || echo "unknown")
+    gnome_version=$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo "unknown")
     log_success "GNOME Shell ${gnome_version} detected"
   else
     log_warning "GNOME Shell not running - extension installation will be skipped"
@@ -362,9 +377,10 @@ prompt_ubuntu_pro_token() {
   log_info "https://ubuntu.com/pro"
   log_info ""
 
-  # Prompt for token
+  # Prompt for token (use -s for silent input to prevent token leaking in process list)
   local token
-  read -r -p "Enter your Ubuntu Pro token (or press Enter to skip): " token
+  read -r -s -p "Enter your Ubuntu Pro token (or press Enter to skip): " token
+  echo  # Add newline after silent input
 
   # Trim whitespace
   token="${token// /}"
@@ -504,9 +520,11 @@ usg_install() {
   fi
 
   # Verify installation
-  if [[ -x "/usr/sbin/usg" ]]; then
+  local usg_cmd
+  usg_cmd=$(command -v usg 2>/dev/null || true)
+  if [[ -n "${usg_cmd}" && -x "${usg_cmd}" ]]; then
     local usg_version
-    usg_version=$(/usr/sbin/usg --version 2>/dev/null || echo "unknown")
+    usg_version=$("${usg_cmd}" --version 2>/dev/null || echo "unknown")
     log_success "Ubuntu Security Guide installed successfully (${usg_version})"
   else
     log_error "USG installation verification failed"
@@ -522,15 +540,23 @@ usg_audit() {
 
   section "Running CIS Compliance Audit"
 
+  # Get usg command path
+  local usg_cmd
+  usg_cmd=$(command -v usg 2>/dev/null || true)
+  if [[ -z "${usg_cmd}" ]]; then
+    log_error "usg command not found - USG may not be installed"
+    return "${EXIT_USG_FAILED}"
+  fi
+
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: /usr/sbin/usg audit ${CIS_PROFILE}"
+    log_info "[DRY-RUN] Would run: ${usg_cmd} audit ${CIS_PROFILE}"
     return 0
   fi
 
   log_info "Running audit for profile: ${CIS_PROFILE}"
   log_info "This may take several minutes..."
 
-  if /usr/sbin/usg audit "${CIS_PROFILE}" 2>&1 | tee -a "${LOG_FILE}"; then
+  if "${usg_cmd}" audit "${CIS_PROFILE}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "CIS compliance audit completed"
     log_info "Reports available in: /var/lib/usg/reports/"
 
@@ -548,8 +574,16 @@ usg_audit() {
 usg_fix() {
   section "Applying CIS Benchmark Hardening"
 
+  # Get usg command path
+  local usg_cmd
+  usg_cmd=$(command -v usg 2>/dev/null || true)
+  if [[ -z "${usg_cmd}" ]]; then
+    log_error "usg command not found - USG may not be installed"
+    return "${EXIT_USG_FAILED}"
+  fi
+
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: /usr/sbin/usg fix ${CIS_PROFILE}"
+    log_info "[DRY-RUN] Would run: ${usg_cmd} fix ${CIS_PROFILE}"
     log_info "[DRY-RUN] Would create backup of /etc directory"
     return 0
   fi
@@ -571,13 +605,14 @@ usg_fix() {
   log_info "Applying CIS hardening for profile: ${CIS_PROFILE}"
   log_warning "This will modify system security settings"
 
-  local fix_cmd="/usr/sbin/usg fix ${CIS_PROFILE}"
+  # Build command as array to prevent word splitting vulnerabilities
+  local -a fix_cmd=("${usg_cmd}" fix "${CIS_PROFILE}")
   if [[ "${NO_AUDIT}" == false ]]; then
-    fix_cmd="${fix_cmd} --only-failed"
+    fix_cmd+=(--only-failed)
     log_info "Using --only-failed to remediate only failing controls"
   fi
 
-  if ${fix_cmd} 2>&1 | tee -a "${LOG_FILE}"; then
+  if "${fix_cmd[@]}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "CIS hardening applied successfully"
     REBOOT_REQUIRED=true
   else
@@ -605,9 +640,11 @@ setup_microsoft_gpg() {
 
   log_info "Installing Microsoft GPG signing key..."
 
-  if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft.gpg 2>&1 | tee -a "${LOG_FILE}"; then
-    install -D -o root -g root -m 644 /tmp/microsoft.gpg "${gpg_key}"
-    rm -f /tmp/microsoft.gpg
+  local temp_gpg
+  temp_gpg=$(mktemp)
+  if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > "${temp_gpg}" 2>&1 | tee -a "${LOG_FILE}"; then
+    install -D -o root -g root -m 644 "${temp_gpg}" "${gpg_key}"
+    rm -f "${temp_gpg}"
     log_success "Microsoft GPG key installed"
   else
     log_error "Failed to install Microsoft GPG key"
@@ -912,9 +949,11 @@ setup_microsoft_products_repo() {
   log_info "Configuring Microsoft products repository..."
 
   # Download and install Microsoft products GPG key
-  if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft-prod.gpg 2>&1 | tee -a "${LOG_FILE}"; then
-    install -D -o root -g root -m 644 /tmp/microsoft-prod.gpg "${gpg_key}"
-    rm -f /tmp/microsoft-prod.gpg
+  local temp_gpg
+  temp_gpg=$(mktemp)
+  if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > "${temp_gpg}" 2>&1 | tee -a "${LOG_FILE}"; then
+    install -D -o root -g root -m 644 "${temp_gpg}" "${gpg_key}"
+    rm -f "${temp_gpg}"
     log_success "Microsoft products GPG key installed"
   else
     log_error "Failed to install Microsoft products GPG key"
@@ -1191,7 +1230,7 @@ install_vitals() {
 
   # Get GNOME Shell version for API query
   local gnome_version
-  gnome_version=$(gnome-shell --version | grep -oP '\d+\.\d+' | cut -d. -f1)
+  gnome_version=$(gnome-shell --version | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
 
   log_info "Detected GNOME Shell version: ${gnome_version}"
   log_info "Downloading Vitals extension from extensions.gnome.org..."
@@ -1218,7 +1257,8 @@ install_vitals() {
 
   # Download extension
   local download_url="https://extensions.gnome.org/download-extension/Vitals@CoreCoding.com.shell-extension.zip?version_tag=${version_tag}"
-  local temp_zip="/tmp/vitals-extension.zip"
+  local temp_zip
+  temp_zip=$(mktemp --suffix=.zip)
 
   if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_error "Failed to download Vitals extension"
@@ -1317,7 +1357,7 @@ install_awsm() {
 
   # Get GNOME Shell version for API query
   local gnome_version
-  gnome_version=$(gnome-shell --version | grep -oP '\d+\.\d+' | cut -d. -f1)
+  gnome_version=$(gnome-shell --version | grep -oE '[0-9]+\.[0-9]+' | cut -d. -f1)
 
   log_info "Detected GNOME Shell version: ${gnome_version}"
   log_info "Downloading AWSM extension from extensions.gnome.org..."
@@ -1344,7 +1384,8 @@ install_awsm() {
 
   # Download extension
   local download_url="https://extensions.gnome.org/download-extension/another-window-session-manager@gmail.com.shell-extension.zip?version_tag=${version_tag}"
-  local temp_zip="/tmp/awsm-extension.zip"
+  local temp_zip
+  temp_zip=$(mktemp --suffix=.zip)
 
   if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_error "Failed to download AWSM extension"
