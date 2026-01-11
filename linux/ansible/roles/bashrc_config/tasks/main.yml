@@ -1,0 +1,62 @@
+---
+# Bashrc alias configuration tasks
+# Replicates functionality from configure-bashrc.sh
+
+- name: Get repository root path
+  ansible.builtin.command: git rev-parse --show-toplevel
+  args:
+    chdir: "{{ playbook_dir }}"
+  register: git_root
+  changed_when: false
+  become: false
+
+- name: Set repository root fact
+  ansible.builtin.set_fact:
+    repo_root: "{{ git_root.stdout }}"
+
+- name: Check if .bashrc exists
+  ansible.builtin.stat:
+    path: "{{ bashrc_home }}/.bashrc"
+  register: bashrc_stat
+  when: bashrc_state == 'present'
+
+- name: Create .bashrc if it does not exist
+  ansible.builtin.file:
+    path: "{{ bashrc_home }}/.bashrc"
+    state: touch
+    mode: "0644"
+  when:
+    - bashrc_state == 'present'
+    - not bashrc_stat.stat.exists
+
+- name: Add system-lifecycle aliases to .bashrc
+  ansible.builtin.blockinfile:
+    path: "{{ bashrc_home }}/.bashrc"
+    marker: "# {mark}"
+    marker_begin: ">>> system-lifecycle >>>"
+    marker_end: "<<< system-lifecycle <<<"
+    block: |
+      # Aliases managed by system-lifecycle - do not edit manually
+      alias update-system='cd {{ repo_root }}/linux/ansible && ansible-playbook playbooks/update-system.yml'
+    state: "{{ bashrc_state }}"
+    backup: true
+  register: bashrc_update
+
+- name: Display configuration result (added/updated)
+  ansible.builtin.debug:
+    msg: "Aliases configured in {{ bashrc_home }}/.bashrc. Run 'source ~/.bashrc' to activate."
+  when:
+    - bashrc_state == 'present'
+    - bashrc_update is changed
+
+- name: Display configuration result (removed)
+  ansible.builtin.debug:
+    msg: "Managed section removed from {{ bashrc_home }}/.bashrc"
+  when:
+    - bashrc_state == 'absent'
+    - bashrc_update is changed
+
+- name: Display no changes message
+  ansible.builtin.debug:
+    msg: "No changes needed to {{ bashrc_home }}/.bashrc"
+  when: bashrc_update is not changed

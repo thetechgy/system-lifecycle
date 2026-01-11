@@ -16,6 +16,7 @@ system-lifecycle/
 │   │   ├── colors.sh       # Terminal color definitions
 │   │   ├── logging.sh      # Logging utilities
 │   │   └── utils.sh        # Common utility functions
+│   ├── ansible/            # Local Ansible playbooks
 │   ├── ubuntu/             # Ubuntu-specific scripts
 │   │   ├── update/         # System update scripts
 │   │   ├── configure/      # Configuration scripts
@@ -53,6 +54,13 @@ update-system --firmware   # Include firmware updates
 
 # Or run directly
 sudo ./linux/ubuntu/update/update-system.sh
+```
+
+### Local Ansible Update (optional)
+
+```bash
+cd linux/ansible
+ansible-playbook playbooks/update-system.yml
 ```
 
 ### Update Script Options
@@ -126,6 +134,7 @@ The script adds a managed section with markers, making it safe to run multiple t
 - Ubuntu 24.04 LTS (or compatible Debian-based distribution)
 - Root/sudo privileges
 - Optional: npm (for global package updates)
+- Optional: Ansible 2.9+ (for `linux/ansible` playbooks)
 
 ## Development
 

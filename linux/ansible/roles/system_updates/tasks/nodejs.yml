@@ -1,0 +1,57 @@
+---
+# Node.js upgrade tasks via NodeSource APT repository
+
+- name: Ensure keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download NodeSource GPG key
+  ansible.builtin.get_url:
+    url: "{{ nodejs_nodesource_key_url }}"
+    dest: /tmp/nodesource.gpg.key
+    mode: '0644'
+  register: nodesource_key_download
+
+- name: Convert and install NodeSource GPG key
+  ansible.builtin.shell: |
+    gpg --batch --yes --dearmor -o {{ nodejs_nodesource_keyring }} /tmp/nodesource.gpg.key
+  args:
+    creates: "{{ nodejs_nodesource_keyring }}"
+  when: nodesource_key_download is changed
+
+- name: Ensure GPG key has correct permissions
+  ansible.builtin.file:
+    path: "{{ nodejs_nodesource_keyring }}"
+    mode: '0644'
+
+- name: Remove temporary key file
+  ansible.builtin.file:
+    path: /tmp/nodesource.gpg.key
+    state: absent
+
+- name: Add NodeSource repository
+  ansible.builtin.apt_repository:
+    repo: "{{ nodejs_nodesource_repo }}"
+    filename: nodesource
+    state: present
+    update_cache: true
+
+- name: Install/upgrade Node.js
+  ansible.builtin.apt:
+    name: nodejs
+    state: latest
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+- name: Display Node.js version
+  ansible.builtin.command: node --version
+  register: nodejs_version_check
+  changed_when: false
+  failed_when: false
+
+- name: Display Node.js upgrade result
+  ansible.builtin.debug:
+    msg: "Node.js version: {{ nodejs_version_check.stdout }}"
+  when: nodejs_version_check.rc == 0

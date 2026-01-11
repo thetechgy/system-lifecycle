@@ -1,0 +1,110 @@
+---
+# update-system.yml - Ubuntu System Update Playbook
+#
+# Description:
+#   Performs comprehensive system updates including apt packages,
+#   snap, flatpak, npm global packages, and optional firmware updates.
+#
+# Usage:
+#   # Full update (apt, snap, flatpak, npm)
+#   ansible-playbook playbooks/update-system.yml
+#
+#   # Dry-run (check mode)
+#   ansible-playbook playbooks/update-system.yml --check
+#
+#   # Disable specific package managers
+#   ansible-playbook playbooks/update-system.yml -e "update_snap=false"
+#   ansible-playbook playbooks/update-system.yml -e "update_snap=false update_npm=false"
+#
+#   # Enable firmware updates (opt-in)
+#   ansible-playbook playbooks/update-system.yml -e "update_firmware=true"
+#
+#   # Full cache clean instead of autoclean
+#   ansible-playbook playbooks/update-system.yml -e "apt_full_clean=true"
+#
+#   # Upgrade Node.js via NodeSource APT
+#   ansible-playbook playbooks/update-system.yml -e "update_nodejs=true"
+#   ansible-playbook playbooks/update-system.yml -e "update_nodejs=true nodejs_version=22"
+#
+#   # Run only specific updates using tags
+#   ansible-playbook playbooks/update-system.yml --tags apt
+#   ansible-playbook playbooks/update-system.yml --tags "apt,npm"
+#
+# Variables:
+#   update_apt: true         - Set to false to skip apt updates
+#   update_snap: true        - Set to false to skip snap updates
+#   update_flatpak: true     - Set to false to skip flatpak updates
+#   update_npm: true         - Set to false to skip npm updates
+#   update_firmware: false   - Set to true to enable firmware updates
+#   update_nodejs: false     - Set to true to upgrade Node.js via NodeSource
+#   apt_full_clean: false    - Set to true for full apt cache clean
+#   nodejs_version: "20"     - Node.js major version for NodeSource APT
+#
+# Author: Travis McDade
+# License: MIT
+
+- name: System Update Playbook
+  hosts: localhost
+  connection: local
+  become: true
+
+  pre_tasks:
+    - name: Check if running on WSL
+      ansible.builtin.set_fact:
+        is_wsl: "{{ 'microsoft' in ansible_kernel | lower }}"
+      tags: always
+
+    - name: Display system information
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          System Information
+          ================================================
+          Hostname: {{ ansible_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          Architecture: {{ ansible_architecture }}
+          WSL: {{ is_wsl }}
+          ================================================
+          Update Configuration
+          ================================================
+          APT updates: {{ _compat_update_apt | default(update_apt) | default(true) }}
+          Snap updates: {{ _compat_update_snap | default(update_snap) | default(true) }}
+          Flatpak updates: {{ _compat_update_flatpak | default(update_flatpak) | default(true) }}
+          NPM updates: {{ _compat_update_npm | default(update_npm) | default(true) }}
+          Firmware updates: {{ _compat_update_firmware | default(update_firmware) | default(false) }}
+          Node.js upgrade: {{ _compat_update_nodejs | default(update_nodejs) | default(false) }}
+          Full cache clean: {{ _compat_apt_full_clean | default(apt_full_clean) | default(false) }}
+          {% if _compat_update_nodejs | default(update_nodejs) | default(false) %}
+          Target Node.js version: {{ nodejs_version | default('20') }}.x (NodeSource APT)
+          {% endif %}
+          ================================================
+      tags: always
+
+  roles:
+    - role: system_updates
+      tags: [update]
+
+  post_tasks:
+    - name: Check if reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags: always
+
+    - name: Display reboot warning
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          WARNING: System reboot is required to complete updates
+          ================================================
+      when: reboot_required.stat.exists
+      tags: always
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          Update Complete
+          ================================================
+      tags: always

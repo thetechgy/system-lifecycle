@@ -1,0 +1,7 @@
+---
+# Internal variables for system_updates role
+
+# NodeSource APT repository settings
+nodejs_nodesource_key_url: "https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+nodejs_nodesource_keyring: "/etc/apt/keyrings/nodesource.gpg"
+nodejs_nodesource_repo: "deb [signed-by={{ nodejs_nodesource_keyring }}] https://deb.nodesource.com/node_{{ nodejs_version }}.x nodistro main"

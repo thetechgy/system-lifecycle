@@ -1,0 +1,16 @@
+---
+# Default variables for system_updates role
+
+# Core package manager updates (enabled by default)
+update_apt: true
+update_snap: true
+update_flatpak: true
+update_npm: true
+
+# Optional features (disabled by default)
+update_firmware: false
+update_nodejs: false
+apt_full_clean: false
+
+# Node.js version for NodeSource APT installation
+nodejs_version: "20"

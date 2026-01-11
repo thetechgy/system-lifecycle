@@ -1,0 +1,36 @@
+---
+# Main entry point for system_updates role
+# Orchestrates all package manager updates
+
+- name: APT package updates
+  ansible.builtin.include_tasks: apt.yml
+  tags: [apt, update]
+
+- name: Snap package updates
+  ansible.builtin.include_tasks: snap.yml
+  when: _compat_update_snap | default(update_snap)
+  tags: [snap, update]
+
+- name: Flatpak package updates
+  ansible.builtin.include_tasks: flatpak.yml
+  when: _compat_update_flatpak | default(update_flatpak)
+  tags: [flatpak, update]
+
+- name: Node.js upgrade
+  ansible.builtin.include_tasks: nodejs.yml
+  when: _compat_update_nodejs | default(update_nodejs)
+  tags: [nodejs, update]
+
+- name: NPM global package updates
+  ansible.builtin.include_tasks: npm.yml
+  when: _compat_update_npm | default(update_npm)
+  tags: [npm, update]
+
+- name: Firmware updates
+  ansible.builtin.include_tasks: firmware.yml
+  when: _compat_update_firmware | default(update_firmware)
+  tags: [firmware, update]
+
+- name: APT cleanup
+  ansible.builtin.include_tasks: cleanup.yml
+  tags: [apt, update]

@@ -1,0 +1,65 @@
+---
+# NPM global package update tasks
+
+- name: Check if npm is installed
+  ansible.builtin.command: npm --version
+  register: npm_check
+  changed_when: false
+  failed_when: false
+  become: false
+
+- name: Skip message when npm not installed
+  ansible.builtin.debug:
+    msg: "npm is not installed, skipping npm updates"
+  when: npm_check.rc != 0
+
+- name: Update npm global packages (user scope)
+  block:
+    - name: Check for outdated npm global packages
+      ansible.builtin.command: npm outdated -g --parseable
+      register: npm_outdated
+      changed_when: false
+      failed_when: false
+
+    - name: Display outdated npm packages
+      ansible.builtin.debug:
+        msg: "Outdated npm packages:\n{{ npm_outdated.stdout }}"
+      when: npm_outdated.stdout | length > 0
+
+    - name: Display npm up-to-date message
+      ansible.builtin.debug:
+        msg: "All npm global packages are up to date"
+      when:
+        - npm_outdated.stdout | length == 0
+        - npm_outdated.rc == 0
+
+    - name: Warn if npm outdated check returned errors
+      ansible.builtin.debug:
+        msg: "Warning: npm outdated check reported errors"
+      when:
+        - npm_outdated.stdout | length == 0
+        - npm_outdated.rc != 0
+
+    - name: Update npm global packages
+      ansible.builtin.command: npm update -g
+      register: npm_update
+      changed_when: npm_update.rc == 0
+      failed_when: false
+      when: npm_outdated.stdout | length > 0
+
+    - name: Display npm update results
+      ansible.builtin.debug:
+        msg: "{{ (npm_update.stdout_lines | default([])) + (npm_update.stderr_lines | default([])) }}"
+      when: npm_outdated.stdout | length > 0
+
+    - name: Warn if npm update reported errors
+      ansible.builtin.debug:
+        msg: "Warning: npm update reported errors"
+      when:
+        - npm_outdated.stdout | length > 0
+        - npm_update.rc != 0
+  when: npm_check.rc == 0
+  become: false
+  environment:
+    HOME: "{{ ansible_user_dir }}"
+    PATH: "{{ ansible_env.PATH }}"

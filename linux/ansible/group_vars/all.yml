@@ -1,0 +1,47 @@
+---
+# Global variables for system-lifecycle Ansible playbooks
+#
+# These can be overridden via --extra-vars (-e) on the command line:
+#   ansible-playbook playbooks/update-system.yml -e "update_snap=false"
+
+# ============================================================
+# Update Feature Toggles (standardized naming)
+# ============================================================
+
+# Core package manager updates (enabled by default)
+update_apt: true
+update_snap: true
+update_flatpak: true
+update_npm: true
+
+# Optional features (disabled by default)
+update_firmware: false
+update_nodejs: false
+apt_full_clean: false
+
+# ============================================================
+# Configuration Options
+# ============================================================
+
+# Node.js version for NodeSource APT installation (major version only)
+nodejs_version: "20"
+
+# Bashrc configuration
+bashrc_state: present  # 'present' or 'absent'
+
+# ============================================================
+# Backwards Compatibility (DEPRECATED - will be removed)
+# ============================================================
+# These mappings allow old variable names to still work.
+# Users should migrate to the new variable names above.
+
+# Map old skip_* variables (inverted logic) to new update_* variables
+# Usage: -e "skip_snap=true" still works but is deprecated
+_compat_update_snap: "{{ (not (skip_snap | bool)) if skip_snap is defined else update_snap }}"
+_compat_update_flatpak: "{{ (not (skip_flatpak | bool)) if skip_flatpak is defined else update_flatpak }}"
+_compat_update_npm: "{{ (not (skip_npm | bool)) if skip_npm is defined else update_npm }}"
+
+# Map old run_*/upgrade_* variables to new names
+_compat_update_firmware: "{{ run_firmware if run_firmware is defined else update_firmware }}"
+_compat_update_nodejs: "{{ upgrade_nodejs if upgrade_nodejs is defined else update_nodejs }}"
+_compat_apt_full_clean: "{{ run_clean if run_clean is defined else apt_full_clean }}"

@@ -1,0 +1,8 @@
+---
+# Default variables for bashrc_config role
+
+# State: 'present' to add aliases, 'absent' to remove them
+bashrc_state: present
+
+# Target user's home directory (defaults to ansible_user_dir)
+bashrc_home: "{{ ansible_user_dir }}"

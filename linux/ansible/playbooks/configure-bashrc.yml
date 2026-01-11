@@ -1,0 +1,56 @@
+---
+# configure-bashrc.yml - Configure Shell Aliases Playbook
+#
+# Description:
+#   Adds managed aliases to ~/.bashrc using section markers.
+#   Safe to run multiple times (idempotent).
+#   Replicates functionality of linux/ubuntu/configure/configure-bashrc.sh
+#
+# Usage:
+#   # Add/update aliases
+#   ansible-playbook playbooks/configure-bashrc.yml
+#
+#   # Dry-run (check mode)
+#   ansible-playbook playbooks/configure-bashrc.yml --check
+#
+#   # Remove aliases
+#   ansible-playbook playbooks/configure-bashrc.yml -e "bashrc_state=absent"
+#
+#   # Configure for a different user
+#   ansible-playbook playbooks/configure-bashrc.yml -e "bashrc_home=/home/otheruser"
+#
+# Variables:
+#   bashrc_state: present - Set to 'absent' to remove the managed section
+#   bashrc_home: ~        - Home directory containing .bashrc
+#
+# Author: Travis McDade
+# License: MIT
+
+- name: Configure Shell Aliases
+  hosts: localhost
+  connection: local
+  become: false
+
+  pre_tasks:
+    - name: Display configuration
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          Bashrc Configuration
+          ================================================
+          State: {{ bashrc_state | default('present') }}
+          Target: {{ bashrc_home | default(ansible_user_dir) }}/.bashrc
+          ================================================
+
+  roles:
+    - role: bashrc_config
+
+  post_tasks:
+    - name: Remind user to reload shell
+      ansible.builtin.debug:
+        msg: |
+          ================================================
+          Configuration complete!
+          Run 'source ~/.bashrc' to activate changes.
+          ================================================
+      when: bashrc_state | default('present') == 'present'

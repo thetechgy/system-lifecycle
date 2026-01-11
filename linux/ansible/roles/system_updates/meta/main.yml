@@ -1,0 +1,16 @@
+---
+# Role metadata for system_updates
+
+galaxy_info:
+  role_name: system_updates
+  author: Travis McDade
+  description: Comprehensive system update role for Ubuntu/Debian systems
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+        - noble
+
+dependencies: []

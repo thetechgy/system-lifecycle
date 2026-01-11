@@ -1,0 +1,11 @@
+---
+# Handlers for system_updates role
+
+- name: Display reboot notification
+  ansible.builtin.debug:
+    msg: |
+      ================================================
+      NOTICE: A system reboot may be required
+      Check /var/run/reboot-required after updates complete
+      ================================================
+  listen: "reboot may be required"

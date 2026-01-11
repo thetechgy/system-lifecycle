@@ -1,0 +1,50 @@
+---
+# Flatpak package update tasks (both system and user scope)
+
+- name: Check if flatpak is installed
+  ansible.builtin.command: flatpak --version
+  register: flatpak_check
+  changed_when: false
+  failed_when: false
+  become: false
+
+- name: Skip message when flatpak not installed
+  ansible.builtin.debug:
+    msg: "flatpak is not installed, skipping flatpak updates"
+  when: flatpak_check.rc != 0
+
+- name: Update flatpak packages (both scopes)
+  block:
+    - name: Update system-wide flatpak packages
+      ansible.builtin.command: flatpak update -y --system
+      register: flatpak_system_update
+      changed_when: "'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))"
+      failed_when: false
+      become: true
+
+    - name: Update user flatpak packages
+      ansible.builtin.command: flatpak update -y --user
+      register: flatpak_user_update
+      changed_when: "'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))"
+      failed_when: false
+      become: false
+      environment:
+        HOME: "{{ ansible_user_dir }}"
+        PATH: "{{ ansible_env.PATH }}"
+
+    - name: Display flatpak update results
+      ansible.builtin.debug:
+        msg: |
+          System scope: {{ flatpak_system_update.stdout | default('Nothing to do') }}
+          User scope: {{ flatpak_user_update.stdout | default('Nothing to do') }}
+
+    - name: Warn if flatpak system update reported errors
+      ansible.builtin.debug:
+        msg: "Warning: flatpak system update reported errors"
+      when: flatpak_system_update.rc != 0
+
+    - name: Warn if flatpak user update reported errors
+      ansible.builtin.debug:
+        msg: "Warning: flatpak user update reported errors"
+      when: flatpak_user_update.rc != 0
+  when: flatpak_check.rc == 0
