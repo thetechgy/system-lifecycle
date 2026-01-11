@@ -119,6 +119,33 @@ repo_add_deb822() {
   local components="${5:-main}"
   local arch="${6:-amd64}"
 
+  # Validate repository name (alphanumeric, hyphens, underscores only)
+  if [[ ! "${name}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    log_error "Invalid repository name: ${name} (must be alphanumeric with hyphens/underscores)"
+    return 1
+  fi
+
+  # Validate URI format (basic check for protocol)
+  if [[ ! "${uri}" =~ ^https?:// ]]; then
+    log_error "Invalid repository URI: ${uri} (must start with http:// or https://)"
+    return 1
+  fi
+
+  # Validate keyring path exists
+  if [[ ! -f "${keyring}" ]]; then
+    log_error "GPG keyring not found: ${keyring}"
+    return 1
+  fi
+
+  # Validate suite/components/arch (no newlines or special chars that could break format)
+  local field
+  for field in "${suite}" "${components}" "${arch}"; do
+    if [[ "${field}" =~ [[:cntrl:]] ]]; then
+      log_error "Invalid characters in repository configuration field"
+      return 1
+    fi
+  done
+
   local repo_file="/etc/apt/sources.list.d/${name}.sources"
 
   # Check if already configured
@@ -129,7 +156,8 @@ repo_add_deb822() {
 
   log_info "Creating repository configuration: ${repo_file}"
 
-  cat > "${repo_file}" << EOF
+  # Use quoted heredoc to prevent any expansion, then substitute safely
+  cat > "${repo_file}" <<EOF
 Types: deb
 URIs: ${uri}
 Suites: ${suite}
@@ -157,6 +185,24 @@ repo_add_traditional() {
   local name="${1}"
   local deb_line="${2}"
 
+  # Validate repository name (alphanumeric, hyphens, underscores only)
+  if [[ ! "${name}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    log_error "Invalid repository name: ${name} (must be alphanumeric with hyphens/underscores)"
+    return 1
+  fi
+
+  # Validate deb line starts with deb or deb-src
+  if [[ ! "${deb_line}" =~ ^deb(-src)?[[:space:]] ]]; then
+    log_error "Invalid deb line format: must start with 'deb' or 'deb-src'"
+    return 1
+  fi
+
+  # Check for control characters that could corrupt the file
+  if [[ "${deb_line}" =~ [[:cntrl:]] ]]; then
+    log_error "Invalid characters in deb line"
+    return 1
+  fi
+
   local repo_file="/etc/apt/sources.list.d/${name}.list"
 
   # Check if already configured
@@ -167,7 +213,7 @@ repo_add_traditional() {
 
   log_info "Creating repository configuration: ${repo_file}"
 
-  echo "${deb_line}" > "${repo_file}"
+  printf '%s\n' "${deb_line}" > "${repo_file}"
 
   if [[ -f "${repo_file}" ]]; then
     log_success "Repository configured: ${name}"

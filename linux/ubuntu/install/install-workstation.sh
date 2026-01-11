@@ -1030,9 +1030,30 @@ install_claude_cli() {
   log_info "Installing Claude Code CLI..."
   log_info "Downloading official installer from Anthropic..."
 
-  if run_as_target_user "${TARGET_USER}" /bin/sh -c \
-    'curl -fsSL https://storage.googleapis.com/claudeai/claude-cli/install.sh | sh' \
+  # Download installer to temp file first (safer than curl|sh)
+  local installer_script
+  installer_script=$(mktemp --suffix=.sh) || {
+    log_error "Failed to create temporary file for installer"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  }
+
+  if ! curl -fsSL -o "${installer_script}" "https://storage.googleapis.com/claudeai/claude-cli/install.sh" 2>>"${LOG_FILE}"; then
+    log_error "Failed to download Claude CLI installer"
+    rm -f "${installer_script}"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
+  # Verify download is not empty
+  if [[ ! -s "${installer_script}" ]]; then
+    log_error "Downloaded installer script is empty"
+    rm -f "${installer_script}"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
+  # Execute the downloaded installer
+  if run_as_target_user "${TARGET_USER}" /bin/sh "${installer_script}" \
     2>&1 | tee -a "${LOG_FILE}"; then
+    rm -f "${installer_script}"
     # Verify installation
     if target_user_command_exists claude; then
       local claude_version
@@ -1044,6 +1065,7 @@ install_claude_cli() {
       return "${EXIT_DEVTOOLS_FAILED}"
     fi
   else
+    rm -f "${installer_script}"
     log_error "Failed to install Claude Code CLI"
     return "${EXIT_DEVTOOLS_FAILED}"
   fi

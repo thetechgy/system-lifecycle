@@ -48,6 +48,14 @@ config_load() {
     return 0
   fi
 
+  # Security check: warn if config file is world-readable (may contain secrets)
+  local file_perms
+  file_perms=$(stat -c '%a' "${config_file}" 2>/dev/null || stat -f '%Lp' "${config_file}" 2>/dev/null)
+  if [[ -n "${file_perms}" ]] && [[ "${file_perms: -1}" != "0" ]]; then
+    log_warning "Config file ${config_file} is world-readable (mode ${file_perms})"
+    log_warning "Consider: chmod 600 ${config_file}"
+  fi
+
   log_info "Loading configuration from: ${config_file}"
 
   local line_num=0
@@ -180,11 +188,48 @@ config_keys() {
   done
 }
 
+# List of key patterns that contain sensitive data (case-insensitive matching)
+_CONFIG_SENSITIVE_PATTERNS=(
+  "token"
+  "password"
+  "secret"
+  "key"
+  "credential"
+  "auth"
+)
+
+# Check if a key name contains sensitive data
+# Arguments:
+#   $1 - Key name to check
+# Returns:
+#   0 if sensitive, 1 otherwise
+_config_is_sensitive() {
+  local key="${1,,}"  # lowercase for comparison
+  local pattern
+  for pattern in "${_CONFIG_SENSITIVE_PATTERNS[@]}"; do
+    if [[ "${key}" == *"${pattern}"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Dump all configuration (for debugging)
+# Sensitive values (tokens, passwords, etc.) are masked for security
 config_dump() {
   log_info "Configuration dump:"
   for key in "${!_CONFIG_VALUES[@]}"; do
-    echo "  ${key}=${_CONFIG_VALUES[${key}]}"
+    local value="${_CONFIG_VALUES[${key}]}"
+    # Mask sensitive values
+    if _config_is_sensitive "${key}"; then
+      if [[ -n "${value}" ]]; then
+        echo "  ${key}=***MASKED***"
+      else
+        echo "  ${key}=(empty)"
+      fi
+    else
+      echo "  ${key}=${value}"
+    fi
   done
 }
 
@@ -229,6 +274,19 @@ config_reset() {
   _CONFIG_VALUES=()
 }
 
+# Dangerous environment variables that should never be set via config
+_CONFIG_BLOCKED_VARS=(
+  "PATH"
+  "LD_PRELOAD"
+  "LD_LIBRARY_PATH"
+  "IFS"
+  "BASH_ENV"
+  "ENV"
+  "CDPATH"
+  "GLOBIGNORE"
+  "BASH_FUNC"
+)
+
 # Apply configuration to script variables
 # Maps config keys to uppercase variable names
 # Arguments:
@@ -240,6 +298,15 @@ config_apply() {
   for key in "$@"; do
     local var_name
     var_name=$(echo "${key}" | tr '[:lower:]' '[:upper:]')
+
+    # Security check: block dangerous environment variables
+    local blocked
+    for blocked in "${_CONFIG_BLOCKED_VARS[@]}"; do
+      if [[ "${var_name}" == "${blocked}" ]]; then
+        log_warning "Refusing to set blocked variable: ${var_name}"
+        continue 2
+      fi
+    done
 
     if config_has "${key}"; then
       local value

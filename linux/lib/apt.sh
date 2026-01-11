@@ -23,7 +23,9 @@ apt_update() {
   log_info "Updating package lists..."
 
   if [[ -n "${log_file}" ]]; then
-    if apt-get update 2>&1 | tee -a "${log_file}"; then
+    apt-get update 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Package lists updated"
       return 0
     fi
@@ -49,7 +51,9 @@ apt_upgrade() {
   log_info "Upgrading packages..."
 
   if [[ -n "${log_file}" ]]; then
-    if DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1 | tee -a "${log_file}"; then
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Packages upgraded"
       return 0
     fi
@@ -75,7 +79,9 @@ apt_dist_upgrade() {
   log_info "Performing distribution upgrade..."
 
   if [[ -n "${log_file}" ]]; then
-    if DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y 2>&1 | tee -a "${log_file}"; then
+    DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Distribution upgrade completed"
       return 0
     fi
@@ -131,7 +137,9 @@ apt_install_with_log() {
   local packages=("$@")
   log_info "Installing packages: ${packages[*]}"
 
-  if DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" 2>&1 | tee -a "${log_file}"; then
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" 2>&1 | tee -a "${log_file}"
+  # Use PIPESTATUS to get apt-get exit code, not tee's
+  if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
     log_success "Packages installed: ${packages[*]}"
     return 0
   fi
@@ -151,7 +159,9 @@ apt_autoremove() {
   log_info "Removing unused packages..."
 
   if [[ -n "${log_file}" ]]; then
-    if apt-get autoremove -y 2>&1 | tee -a "${log_file}"; then
+    apt-get autoremove -y 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Unused packages removed"
       return 0
     fi
@@ -177,7 +187,9 @@ apt_autoclean() {
   log_info "Cleaning package cache (autoclean)..."
 
   if [[ -n "${log_file}" ]]; then
-    if apt-get autoclean 2>&1 | tee -a "${log_file}"; then
+    apt-get autoclean 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Package cache cleaned"
       return 0
     fi
@@ -203,7 +215,9 @@ apt_clean() {
   log_info "Cleaning package cache (full clean)..."
 
   if [[ -n "${log_file}" ]]; then
-    if apt-get clean 2>&1 | tee -a "${log_file}"; then
+    apt-get clean 2>&1 | tee -a "${log_file}"
+    # Use PIPESTATUS to get apt-get exit code, not tee's
+    if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
       log_success "Package cache fully cleaned"
       return 0
     fi

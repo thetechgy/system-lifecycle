@@ -289,12 +289,19 @@ Configured in `.pre-commit-config.yaml`:
 
 ## Future Considerations
 
+### Implemented Features
+
+The following features have been implemented:
+
+1. **Rollback Mechanism** (`linux/lib/rollback.sh`): Create restore points, backup files/directories, restore from snapshots
+2. **Retry Logic** (`linux/lib/retry.sh`): Automatic retry with exponential backoff, jitter, and configurable conditions
+3. **Config File Support** (`linux/lib/config.sh`): External configuration files with validation and secret masking
+
 ### Planned Features
 
-1. **Rollback Mechanism**: Undo capability for changes
-2. **Retry Logic**: Automatic retry for transient failures
-3. **Config File Support**: External configuration files
-4. **Uninstall Script**: Reverse workstation installation
+1. **Uninstall Script**: Reverse workstation installation
+2. **Debian Support**: Distribution-specific scripts for Debian (placeholder exists)
+3. **Common Scripts**: Distribution-agnostic utilities (placeholder exists)
 
 ### Architectural Decisions
 

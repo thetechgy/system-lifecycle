@@ -40,26 +40,27 @@ rollback_create_restore_point() {
 
   # Backup /etc directory
   log_info "Backing up /etc directory..."
-  if tar czf "${restore_point_dir}/etc.tar.gz" /etc/ 2>/dev/null; then
+  local tar_output
+  if tar_output=$(tar czf "${restore_point_dir}/etc.tar.gz" /etc/ 2>&1); then
     log_success "Backed up /etc"
   else
-    log_warning "Failed to backup /etc (non-critical)"
+    log_warning "Failed to backup /etc (non-critical): ${tar_output}"
   fi
 
   # Backup APT sources
   log_info "Backing up APT sources..."
-  if tar czf "${restore_point_dir}/apt-sources.tar.gz" /etc/apt/sources.list.d/ 2>/dev/null; then
+  if tar_output=$(tar czf "${restore_point_dir}/apt-sources.tar.gz" /etc/apt/sources.list.d/ 2>&1); then
     log_success "Backed up APT sources"
   else
-    log_warning "Failed to backup APT sources"
+    log_warning "Failed to backup APT sources: ${tar_output}"
   fi
 
   # Backup GPG keys
   log_info "Backing up GPG keyrings..."
-  if tar czf "${restore_point_dir}/keyrings.tar.gz" /usr/share/keyrings/ 2>/dev/null; then
+  if tar_output=$(tar czf "${restore_point_dir}/keyrings.tar.gz" /usr/share/keyrings/ 2>&1); then
     log_success "Backed up GPG keyrings"
   else
-    log_warning "Failed to backup GPG keyrings"
+    log_warning "Failed to backup GPG keyrings: ${tar_output}"
   fi
 
   # Backup additional directories if specified
@@ -67,12 +68,14 @@ rollback_create_restore_point() {
     for dir in "${extra_dirs[@]}"; do
       if [[ -d "${dir}" ]]; then
         local dir_name
-        dir_name=$(echo "${dir}" | tr '/' '_')
+        # Use parameter expansion instead of tr for safer substitution
+        dir_name="${dir//\//_}"
         log_info "Backing up ${dir}..."
-        if tar czf "${restore_point_dir}/${dir_name}.tar.gz" "${dir}" 2>/dev/null; then
+        local tar_output
+        if tar_output=$(tar czf "${restore_point_dir}/${dir_name}.tar.gz" "${dir}" 2>&1); then
           log_success "Backed up ${dir}"
         else
-          log_warning "Failed to backup ${dir}"
+          log_warning "Failed to backup ${dir}: ${tar_output}"
         fi
       fi
     done
@@ -141,15 +144,17 @@ rollback_backup_directory() {
   mkdir -p "${backup_dir}"
 
   local dirname
-  dirname=$(echo "${dir}" | tr '/' '_')
+  # Use parameter expansion instead of tr for safer substitution
+  dirname="${dir//\//_}"
   local backup_path="${backup_dir}/${dirname}.${label}.tar.gz"
 
-  if tar czf "${backup_path}" "${dir}" 2>/dev/null; then
+  local tar_output
+  if tar_output=$(tar czf "${backup_path}" "${dir}" 2>&1); then
     log_success "Backed up: ${dir} -> ${backup_path}"
     return 0
   fi
 
-  log_error "Failed to backup directory: ${dir}"
+  log_error "Failed to backup directory: ${dir} (${tar_output})"
   return 1
 }
 
@@ -190,8 +195,11 @@ rollback_restore() {
   if [[ -d "${restore_point}" ]]; then
     restore_point_dir="${restore_point}"
   else
+    # Escape glob metacharacters in restore_point name for safe find
+    local safe_pattern
+    safe_pattern=$(printf '%s' "${restore_point}" | sed 's/[][*?\\]/\\&/g')
     # Try to find by name pattern
-    restore_point_dir=$(find "${ROLLBACK_DIR}/restore-points" -maxdepth 1 -type d -name "${restore_point}*" | sort -r | head -1)
+    restore_point_dir=$(find "${ROLLBACK_DIR}/restore-points" -maxdepth 1 -type d -name "${safe_pattern}*" 2>/dev/null | sort -r | head -1)
   fi
 
   if [[ -z "${restore_point_dir}" || ! -d "${restore_point_dir}" ]]; then
@@ -237,12 +245,13 @@ rollback_restore_etc() {
   fi
 
   log_info "Restoring /etc..."
-  if tar xzf "${archive}" -C / 2>/dev/null; then
+  local tar_output
+  if tar_output=$(tar xzf "${archive}" -C / 2>&1); then
     log_success "Restored /etc"
     return 0
   fi
 
-  log_error "Failed to restore /etc"
+  log_error "Failed to restore /etc: ${tar_output}"
   return 1
 }
 
@@ -257,13 +266,17 @@ rollback_restore_apt() {
   fi
 
   log_info "Restoring APT sources..."
-  if tar xzf "${archive}" -C / 2>/dev/null; then
+  local tar_output
+  if tar_output=$(tar xzf "${archive}" -C / 2>&1); then
     log_success "Restored APT sources"
-    apt-get update 2>/dev/null || true
+    # Update APT after restoring sources (non-critical if fails)
+    if ! apt-get update >/dev/null 2>&1; then
+      log_warning "apt-get update after restore returned non-zero (may need manual intervention)"
+    fi
     return 0
   fi
 
-  log_error "Failed to restore APT sources"
+  log_error "Failed to restore APT sources: ${tar_output}"
   return 1
 }
 
@@ -278,12 +291,13 @@ rollback_restore_keyrings() {
   fi
 
   log_info "Restoring GPG keyrings..."
-  if tar xzf "${archive}" -C / 2>/dev/null; then
+  local tar_output
+  if tar_output=$(tar xzf "${archive}" -C / 2>&1); then
     log_success "Restored GPG keyrings"
     return 0
   fi
 
-  log_error "Failed to restore GPG keyrings"
+  log_error "Failed to restore GPG keyrings: ${tar_output}"
   return 1
 }
 
