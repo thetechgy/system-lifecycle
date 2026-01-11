@@ -42,7 +42,7 @@
 #
 # Author: Travis McDade
 # License: MIT
-# Version: 1.2.0
+# Version: 1.3.0
 
 set -o errexit   # Exit on error
 set -o nounset   # Exit on undefined variable
@@ -54,7 +54,7 @@ set -o pipefail  # Catch pipeline failures
 
 SCRIPT_NAME="$(basename "${0}")"
 readonly SCRIPT_NAME
-readonly SCRIPT_VERSION="1.2.0"
+readonly SCRIPT_VERSION="1.3.0"
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 readonly SCRIPT_DIR
 readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
@@ -120,7 +120,7 @@ Installs and configures:
   - Microsoft Edge, Visual Studio Code, and Discord
   - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
   - Developer tools (PowerShell, GitHub CLI, jq)
-  - GNOME extensions (dash-to-panel, Vitals)
+  - GNOME extensions (dash-to-panel, Vitals, AWSM)
   - Fastfetch system information tool
 
 Options:
@@ -1003,6 +1003,115 @@ configure_vitals() {
 }
 
 # -----------------------------------------------------------------------------
+# AWSM (Another Window Session Manager) Extension Functions
+# -----------------------------------------------------------------------------
+
+install_awsm() {
+  if [[ "${SKIP_EXTENSIONS}" == true ]]; then
+    return 0
+  fi
+
+  section "Installing AWSM (Another Window Session Manager) Extension"
+
+  # Check GNOME Shell is running
+  if ! pgrep -x gnome-shell >/dev/null; then
+    log_warning "GNOME Shell is not running, skipping AWSM installation"
+    return 0
+  fi
+
+  # Install required dependencies first
+  log_info "Installing AWSM dependencies (procps, libglib2.0-bin, libgtop2-dev)..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y procps libglib2.0-bin libgtop2-dev 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "AWSM dependencies installed successfully"
+  else
+    log_warning "Some AWSM dependencies may not have installed correctly"
+  fi
+
+  # Check if already installed
+  if gnome-extensions list 2>/dev/null | grep -q "another-window-session-manager@gmail.com"; then
+    log_success "AWSM extension is already installed"
+    enable_awsm
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install AWSM extension from GNOME Extensions"
+    log_info "[DRY-RUN] Would enable another-window-session-manager@gmail.com extension"
+    return 0
+  fi
+
+  # Get GNOME Shell version for API query
+  local gnome_version
+  gnome_version=$(gnome-shell --version | grep -oP '\d+\.\d+' | cut -d. -f1)
+
+  log_info "Detected GNOME Shell version: ${gnome_version}"
+  log_info "Downloading AWSM extension from extensions.gnome.org..."
+
+  # Query API for correct version
+  local extension_info
+  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=another-window-session-manager@gmail.com")
+
+  if [[ -z "${extension_info}" ]]; then
+    log_error "Failed to query GNOME Extensions API"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  # Extract version_tag for current GNOME Shell version
+  local version_tag
+  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null)
+
+  if [[ -z "${version_tag}" || "${version_tag}" == "null" ]]; then
+    log_error "AWSM extension not available for GNOME Shell ${gnome_version}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  log_info "Extension version tag: ${version_tag}"
+
+  # Download extension
+  local download_url="https://extensions.gnome.org/download-extension/another-window-session-manager@gmail.com.shell-extension.zip?version_tag=${version_tag}"
+  local temp_zip="/tmp/awsm-extension.zip"
+
+  if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_error "Failed to download AWSM extension"
+    rm -f "${temp_zip}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  # Install extension using gnome-extensions
+  log_info "Installing AWSM extension..."
+  if gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "AWSM extension installed successfully"
+    rm -f "${temp_zip}"
+
+    # Enable the extension
+    enable_awsm
+  else
+    log_error "Failed to install AWSM extension"
+    rm -f "${temp_zip}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+}
+
+enable_awsm() {
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would enable another-window-session-manager@gmail.com extension"
+    return 0
+  fi
+
+  log_info "Enabling AWSM extension..."
+
+  # Enable the extension
+  if gnome-extensions enable another-window-session-manager@gmail.com 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "AWSM extension enabled"
+    log_info "AWSM allows you to save and restore window sessions across reboots"
+    log_info "Access AWSM via the panel indicator to save/restore sessions"
+    log_info "Auto-restore on startup is disabled by default (configure in extension settings)"
+  else
+    log_warning "Failed to enable AWSM extension (may need manual activation)"
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # Fastfetch Functions
 # -----------------------------------------------------------------------------
 
@@ -1154,6 +1263,7 @@ main() {
     if [[ "${SKIP_EXTENSIONS}" != true ]]; then
       install_dash_to_panel
       install_vitals
+      install_awsm
     fi
 
     # Phase 5: Fastfetch (unless --skip-fastfetch)
