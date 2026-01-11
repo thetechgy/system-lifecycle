@@ -720,11 +720,14 @@ install_dash_to_panel() {
   if dpkg -l | grep -q "^ii.*gnome-shell-extension-dash-to-panel "; then
     log_success "Dash to Panel extension is already installed"
     GNOME_EXTENSIONS_INSTALLED=true
+    # Apply configuration even if already installed
+    configure_dash_to_panel
     return 0
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
     log_info "[DRY-RUN] Would install gnome-shell-extension-dash-to-panel"
+    log_info "[DRY-RUN] Would configure dash-to-panel settings"
     return 0
   fi
 
@@ -733,13 +736,51 @@ install_dash_to_panel() {
   if DEBIAN_FRONTEND=noninteractive apt-get install -y gnome-shell-extension-dash-to-panel 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "Dash to Panel extension installed successfully"
     GNOME_EXTENSIONS_INSTALLED=true
-    log_info "To enable the extension, run:"
-    log_info "  gnome-extensions enable dash-to-panel@jderose9.github.com"
-    log_info "Or enable it via the Extensions application"
-    log_warning "Note: You may need to logout/login for the extension to be available"
+
+    # Apply configuration
+    configure_dash_to_panel
   else
     log_error "Failed to install dash-to-panel extension"
     return "${EXIT_EXTENSION_FAILED}"
+  fi
+}
+
+configure_dash_to_panel() {
+  local config_file="${CONFIG_DIR}/dash-to-panel.dconf"
+
+  # Check if config file exists
+  if [[ ! -f "${config_file}" ]]; then
+    log_warning "Dash-to-panel configuration file not found: ${config_file}"
+    log_info "Skipping dash-to-panel configuration"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would enable dash-to-panel extension"
+    log_info "[DRY-RUN] Would load configuration from: ${config_file}"
+    return 0
+  fi
+
+  log_info "Configuring dash-to-panel extension..."
+
+  # Enable the extension
+  if command_exists gnome-extensions; then
+    log_info "Enabling dash-to-panel extension..."
+    if gnome-extensions enable dash-to-panel@jderose9.github.com 2>&1 | tee -a "${LOG_FILE}"; then
+      log_success "Dash-to-panel extension enabled"
+    else
+      log_warning "Could not enable extension automatically - may need manual activation"
+    fi
+  fi
+
+  # Load configuration
+  log_info "Loading dash-to-panel configuration..."
+  if dconf load /org/gnome/shell/extensions/dash-to-panel/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Dash-to-panel configuration applied successfully"
+    log_info "Configuration will take effect after GNOME Shell restart or logout/login"
+    log_info "To restart GNOME Shell: Press Alt+F2, type 'r', and press Enter"
+  else
+    log_warning "Failed to load dash-to-panel configuration (non-critical)"
   fi
 }
 
