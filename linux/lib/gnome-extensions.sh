@@ -34,7 +34,7 @@ gnome_extension_is_installed() {
   local uuid="${1}"
 
   if command_exists gnome-extensions; then
-    gnome-extensions list 2>/dev/null | grep -q "${uuid}"
+    gnome-extensions list 2>/dev/null | grep -Fxq -- "${uuid}"
   else
     return 1
   fi

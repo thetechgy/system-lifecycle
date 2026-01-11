@@ -161,7 +161,7 @@ run_as_target_user() {
   uid=$(id -u "${user}")
   local home_dir
   home_dir=$(get_target_home "${user}")
-  local base_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:${home_dir}/.local/bin"
+  local base_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:${home_dir}/.local/bin:${home_dir}/snap/node/current/bin"
 
   if [[ "${user}" == "$(id -un)" ]]; then
     HOME="${home_dir}" PATH="${base_path}:${PATH}" "$@"
@@ -459,6 +459,11 @@ pro_is_attached() {
 }
 
 prompt_ubuntu_pro_token() {
+  if [[ ! -t 0 ]]; then
+    log_warning "No TTY available for Ubuntu Pro token prompt; skipping enrollment"
+    return 0
+  fi
+
   # Display information about Ubuntu Pro
   log_info ""
   log_info "Ubuntu Pro provides access to security hardening tools (USG/CIS)."

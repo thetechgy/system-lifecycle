@@ -78,7 +78,7 @@ The Ubuntu update script performs the following operations in order:
 3. `apt-get dist-upgrade` - Smart upgrade with dependency handling
 4. `snap refresh` - Update snap packages (if installed)
 5. `flatpak update` - Update flatpak packages (if installed)
-6. `npm update -g` - Update global npm packages (if installed)
+6. `npm update -g` - Update global npm packages (if installed, uses invoking user when run via sudo)
 7. `fwupdmgr update` - Update firmware (only with --firmware flag, skipped on WSL)
 8. `apt-get autoremove` - Remove unused packages
 9. `apt-get autoclean` - Clean package cache (or `apt-get clean` with --clean)

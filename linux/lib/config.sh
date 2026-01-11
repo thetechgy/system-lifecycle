@@ -60,7 +60,7 @@ config_load() {
 
   local line_num=0
   while IFS= read -r line || [[ -n "${line}" ]]; do
-    ((line_num++))
+    ((++line_num))
 
     # Skip empty lines and comments
     [[ -z "${line}" || "${line}" =~ ^[[:space:]]*# ]] && continue
@@ -249,8 +249,12 @@ config_save() {
     mkdir -p "${config_dir}" || return 1
   fi
 
+  local old_umask
+  old_umask=$(umask)
+  umask 077
+
   # Write configuration
-  {
+  if ! {
     echo "# System Lifecycle Configuration"
     echo "# Generated on $(date -Iseconds)"
     echo ""
@@ -263,7 +267,14 @@ config_save() {
         echo "${key}=${value}"
       fi
     done
-  } > "${config_file}"
+  } > "${config_file}"; then
+    umask "${old_umask}"
+    log_error "Failed to write configuration to: ${config_file}"
+    return 1
+  fi
+
+  umask "${old_umask}"
+  chmod 600 "${config_file}" 2>/dev/null || true
 
   log_success "Configuration saved to: ${config_file}"
   return 0
