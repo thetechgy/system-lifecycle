@@ -73,6 +73,9 @@ SECURITY_ONLY=false
 APPS_ONLY=false
 CIS_PROFILE="cis_level1_workstation"
 NO_AUDIT=false
+SKIP_UBUNTU_PRO=false
+UBUNTU_PRO_TOKEN=""
+NODEJS_VERSION="20"
 
 # State tracking
 REBOOT_REQUIRED=false
@@ -104,6 +107,7 @@ readonly EXIT_APP_INSTALL_FAILED=8
 readonly EXIT_EXTENSION_FAILED=9
 readonly EXIT_PREREQ_FAILED=10
 readonly EXIT_DEVTOOLS_FAILED=11
+readonly EXIT_UBUNTU_PRO_FAILED=12
 
 # -----------------------------------------------------------------------------
 # Help and Version
@@ -119,7 +123,7 @@ Installs and configures:
   - Ubuntu Security Guide (USG) with CIS benchmarks
   - Microsoft Edge, Visual Studio Code, and Discord
   - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
-  - Developer tools (PowerShell, GitHub CLI, jq)
+  - Developer tools (Node.js, PowerShell, GitHub CLI, jq)
   - GNOME extensions (dash-to-panel, Vitals, AWSM)
   - Fastfetch system information tool
 
@@ -127,8 +131,10 @@ Options:
     -d, --dry-run              Preview changes without executing
     -q, --quiet                Suppress non-essential output
     --skip-security            Skip USG/CIS hardening
+    --skip-ubuntu-pro          Skip Ubuntu Pro enrollment
+    --ubuntu-pro-token=TOKEN   Provide Ubuntu Pro token (non-interactive)
     --skip-apps                Skip MS Edge and VS Code installation
-    --skip-devtools            Skip developer tools (Claude CLI, Codex CLI, PowerShell, gh, jq)
+    --skip-devtools            Skip developer tools (Node.js, Claude CLI, Codex CLI, PowerShell, gh, jq)
     --skip-extensions          Skip GNOME extension installation
     --skip-fastfetch           Skip fastfetch installation
     --security-only            Only run security hardening
@@ -145,12 +151,14 @@ Available CIS Profiles:
     cis_level2_server          CIS Level 2 Server
 
 Examples:
-    sudo ${SCRIPT_NAME}                      # Full installation
-    sudo ${SCRIPT_NAME} --dry-run            # Preview changes
-    sudo ${SCRIPT_NAME} --skip-security      # Skip CIS hardening
-    sudo ${SCRIPT_NAME} --skip-devtools      # Skip AI and dev tools
-    sudo ${SCRIPT_NAME} --security-only      # Only run CIS hardening
-    sudo ${SCRIPT_NAME} --apps-only          # Only install Edge and VS Code
+    sudo ${SCRIPT_NAME}                               # Full installation (prompts for Ubuntu Pro token)
+    sudo ${SCRIPT_NAME} --dry-run                     # Preview changes
+    sudo ${SCRIPT_NAME} --skip-security               # Skip CIS hardening
+    sudo ${SCRIPT_NAME} --skip-ubuntu-pro             # Skip Ubuntu Pro enrollment
+    sudo ${SCRIPT_NAME} --ubuntu-pro-token=C1abc...   # Provide Ubuntu Pro token
+    sudo ${SCRIPT_NAME} --skip-devtools               # Skip Node.js, AI, and dev tools
+    sudo ${SCRIPT_NAME} --security-only               # Only run CIS hardening
+    sudo ${SCRIPT_NAME} --apps-only                   # Only install Edge and VS Code
 
 Exit Codes:
     0  - Success
@@ -162,6 +170,7 @@ Exit Codes:
     9  - Extension installation failed
     10 - Prerequisites check failed
     11 - Developer tools installation failed
+    12 - Ubuntu Pro enrollment failed
 EOF
 }
 
@@ -219,6 +228,14 @@ parse_args() {
         ;;
       --no-audit)
         NO_AUDIT=true
+        shift
+        ;;
+      --skip-ubuntu-pro)
+        SKIP_UBUNTU_PRO=true
+        shift
+        ;;
+      --ubuntu-pro-token=*)
+        UBUNTU_PRO_TOKEN="${1#*=}"
         shift
         ;;
       -h|--help)
@@ -311,6 +328,144 @@ check_prerequisites() {
 }
 
 # -----------------------------------------------------------------------------
+# Ubuntu Pro Functions
+# -----------------------------------------------------------------------------
+
+pro_is_attached() {
+  # Check if system is already attached to Ubuntu Pro
+  if ! command_exists pro; then
+    return 1
+  fi
+
+  # Try using JSON output with jq if available
+  if command_exists jq; then
+    if pro status --format json 2>/dev/null | jq -e '.attached' >/dev/null 2>&1; then
+      return 0
+    else
+      return 1
+    fi
+  fi
+
+  # Fallback: Parse text output
+  if pro status 2>/dev/null | grep -q "attached"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+prompt_ubuntu_pro_token() {
+  # Display information about Ubuntu Pro
+  log_info ""
+  log_info "Ubuntu Pro provides access to security hardening tools (USG/CIS)."
+  log_info "Free for personal use (up to 5 machines). Get your token at:"
+  log_info "https://ubuntu.com/pro"
+  log_info ""
+
+  # Prompt for token
+  local token
+  read -r -p "Enter your Ubuntu Pro token (or press Enter to skip): " token
+
+  # Trim whitespace
+  token="${token// /}"
+
+  # Return the token (empty if skipped)
+  echo "${token}"
+}
+
+pro_attach_with_token() {
+  local token="${1}"
+
+  if [[ -z "${token}" ]]; then
+    log_error "No token provided to pro_attach_with_token"
+    return "${EXIT_UBUNTU_PRO_FAILED}"
+  fi
+
+  log_info "Attempting to attach to Ubuntu Pro..."
+
+  # Attempt to attach
+  if pro attach "${token}" --no-auto-enable 2>&1 | tee -a "${LOG_FILE}"; then
+    local exit_code="${PIPESTATUS[0]}"
+
+    case "${exit_code}" in
+      0)
+        log_success "Successfully attached to Ubuntu Pro"
+        return 0
+        ;;
+      2)
+        log_success "System is already attached to Ubuntu Pro"
+        return 0
+        ;;
+      *)
+        log_error "Failed to attach to Ubuntu Pro (exit code: ${exit_code})"
+        log_error "Please verify your token is valid and try again"
+        return "${EXIT_UBUNTU_PRO_FAILED}"
+        ;;
+    esac
+  else
+    log_error "Failed to attach to Ubuntu Pro"
+    return "${EXIT_UBUNTU_PRO_FAILED}"
+  fi
+}
+
+pro_enroll() {
+  section "Ubuntu Pro Enrollment"
+
+  # Skip if flag is set
+  if [[ "${SKIP_UBUNTU_PRO}" == true ]]; then
+    log_info "Skipping Ubuntu Pro enrollment (--skip-ubuntu-pro flag set)"
+    return 0
+  fi
+
+  # Handle dry-run mode
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would check Ubuntu Pro attachment status"
+    if [[ -n "${UBUNTU_PRO_TOKEN}" ]]; then
+      log_info "[DRY-RUN] Would attempt enrollment with provided token"
+    else
+      log_info "[DRY-RUN] Would prompt for Ubuntu Pro token"
+    fi
+    return 0
+  fi
+
+  # Check if ubuntu-advantage-tools is installed
+  if ! command_exists pro; then
+    log_warning "ubuntu-advantage-tools not found"
+    log_warning "Ubuntu Pro enrollment requires ubuntu-advantage-tools package"
+    log_info "Install with: sudo apt install ubuntu-advantage-tools"
+    return "${EXIT_UBUNTU_PRO_FAILED}"
+  fi
+
+  # Check if already attached
+  if pro_is_attached; then
+    log_success "System is already attached to Ubuntu Pro"
+    return 0
+  fi
+
+  # Determine token source
+  local token="${UBUNTU_PRO_TOKEN}"
+
+  if [[ -z "${token}" ]]; then
+    # Prompt user for token
+    token=$(prompt_ubuntu_pro_token)
+
+    if [[ -z "${token}" ]]; then
+      log_info "Ubuntu Pro enrollment skipped by user"
+      log_warning "Note: USG/CIS hardening requires Ubuntu Pro subscription"
+      return 0
+    fi
+
+    log_info "Ubuntu Pro token provided interactively"
+  else
+    log_info "Ubuntu Pro token provided via command line"
+  fi
+
+  # Attempt enrollment
+  pro_attach_with_token "${token}"
+  return $?
+}
+
+# -----------------------------------------------------------------------------
 # USG/CIS Functions
 # -----------------------------------------------------------------------------
 
@@ -344,7 +499,7 @@ usg_install() {
     log_success "Ubuntu Pro USG service enabled"
   else
     log_error "Failed to enable USG service - ensure Ubuntu Pro is attached"
-    log_info "Run: sudo pro attach <token>"
+    log_info "Run this script with --ubuntu-pro-token=<token> or without --skip-ubuntu-pro"
     return "${EXIT_USG_FAILED}"
   fi
 
@@ -600,6 +755,69 @@ install_discord() {
 }
 
 # -----------------------------------------------------------------------------
+# Node.js Installation Functions
+# -----------------------------------------------------------------------------
+
+install_nodejs() {
+  section "Installing Node.js"
+
+  # Check if Node.js is already installed (any source)
+  if command_exists node; then
+    local node_version
+    node_version=$(node --version 2>/dev/null || echo "unknown")
+    log_success "Node.js is already installed (${node_version})"
+
+    # Verify npm is also available
+    if command_exists npm; then
+      local npm_version
+      npm_version=$(npm --version 2>/dev/null || echo "unknown")
+      log_info "npm version: ${npm_version}"
+    else
+      log_warning "Node.js found but npm is not available"
+      log_warning "Codex CLI installation may fail"
+    fi
+
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install Node.js ${NODEJS_VERSION}.x via snap"
+    log_info "[DRY-RUN] Would run: snap install node --classic --channel=${NODEJS_VERSION}"
+    return 0
+  fi
+
+  # Check if snap is available
+  if ! command_exists snap; then
+    log_error "Snap is not installed - cannot install Node.js"
+    log_info "Install snapd first or use --skip-devtools"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
+  # Install Node.js via snap
+  log_info "Installing Node.js ${NODEJS_VERSION}.x via snap..."
+  log_info "This will include npm for package management"
+
+  if snap install node --classic --channel="${NODEJS_VERSION}" 2>&1 | tee -a "${LOG_FILE}"; then
+    # Verify installation
+    local node_version
+    local npm_version
+
+    # Note: snap binaries might be at /snap/bin/node
+    node_version=$(/snap/bin/node --version 2>/dev/null || node --version 2>/dev/null || echo "unknown")
+    npm_version=$(/snap/bin/npm --version 2>/dev/null || npm --version 2>/dev/null || echo "unknown")
+
+    log_success "Node.js installed successfully (${node_version})"
+    log_info "npm version: ${npm_version}"
+    log_info "Node.js binaries: /snap/bin/node, /snap/bin/npm"
+    log_info "Global npm packages location: ~/snap/node/current/bin/"
+  else
+    log_error "Failed to install Node.js via snap"
+    log_warning "Codex CLI installation will be skipped"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # Developer Tools Functions
 # -----------------------------------------------------------------------------
 
@@ -659,7 +877,8 @@ install_codex_cli() {
   # Check if npm is available
   if ! command_exists npm; then
     log_error "npm is not available - cannot install Codex CLI"
-    log_info "Install Node.js first or use --skip-devtools"
+    log_error "Node.js installation may have failed"
+    log_info "Use --skip-devtools to skip this installation"
     return "${EXIT_DEVTOOLS_FAILED}"
   fi
 
@@ -1215,6 +1434,7 @@ main() {
   log_info "Apps only: ${APPS_ONLY}"
   log_info "CIS profile: ${CIS_PROFILE}"
   log_info "No audit: ${NO_AUDIT}"
+  log_info "Skip Ubuntu Pro: ${SKIP_UBUNTU_PRO}"
 
   section "System Information"
   show_system_info
@@ -1223,6 +1443,7 @@ main() {
   # Execution based on flags
   if [[ "${SECURITY_ONLY}" == true ]]; then
     # Security hardening only
+    pro_enroll
     usg_install
     usg_audit
     usg_fix
@@ -1237,6 +1458,7 @@ main() {
 
     # Phase 1: Security hardening (unless --skip-security)
     if [[ "${SKIP_SECURITY}" != true ]]; then
+      pro_enroll
       usg_install
       usg_audit
       usg_fix
@@ -1252,6 +1474,7 @@ main() {
 
     # Phase 3: Developer tools (unless --skip-devtools)
     if [[ "${SKIP_DEVTOOLS}" != true ]]; then
+      install_nodejs
       install_claude_cli
       install_codex_cli
       install_powershell
