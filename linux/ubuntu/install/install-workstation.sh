@@ -118,6 +118,7 @@ Ubuntu 24.04 LTS Workstation Installation Script
 Installs and configures:
   - Ubuntu Security Guide (USG) with CIS benchmarks
   - Microsoft Edge and Visual Studio Code
+  - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
   - Developer tools (PowerShell, GitHub CLI, jq)
   - GNOME dash-to-panel extension
   - Fastfetch system information tool
@@ -127,7 +128,7 @@ Options:
     -q, --quiet                Suppress non-essential output
     --skip-security            Skip USG/CIS hardening
     --skip-apps                Skip MS Edge and VS Code installation
-    --skip-devtools            Skip developer tools (PowerShell, gh, jq)
+    --skip-devtools            Skip developer tools (Claude CLI, Codex CLI, PowerShell, gh, jq)
     --skip-extensions          Skip GNOME extension installation
     --skip-fastfetch           Skip fastfetch installation
     --security-only            Only run security hardening
@@ -147,7 +148,7 @@ Examples:
     sudo ${SCRIPT_NAME}                      # Full installation
     sudo ${SCRIPT_NAME} --dry-run            # Preview changes
     sudo ${SCRIPT_NAME} --skip-security      # Skip CIS hardening
-    sudo ${SCRIPT_NAME} --skip-devtools      # Skip PowerShell, gh, jq
+    sudo ${SCRIPT_NAME} --skip-devtools      # Skip AI and dev tools
     sudo ${SCRIPT_NAME} --security-only      # Only run CIS hardening
     sudo ${SCRIPT_NAME} --apps-only          # Only install Edge and VS Code
 
@@ -575,6 +576,78 @@ EOF
 # Developer Tools Functions
 # -----------------------------------------------------------------------------
 
+install_claude_cli() {
+  section "Installing Claude Code CLI"
+
+  # Check if already installed
+  if command_exists claude; then
+    local claude_version
+    claude_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "Claude Code CLI is already installed (${claude_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install Claude Code CLI from official installer"
+    return 0
+  fi
+
+  # Install Claude CLI via official installer
+  log_info "Installing Claude Code CLI..."
+  log_info "Downloading official installer from Anthropic..."
+
+  if curl -fsSL https://storage.googleapis.com/claudeai/claude-cli/install.sh | sh 2>&1 | tee -a "${LOG_FILE}"; then
+    # Verify installation
+    if command_exists claude; then
+      local claude_version
+      claude_version=$(claude --version 2>/dev/null | head -1 || echo "unknown")
+      log_success "Claude Code CLI installed successfully (${claude_version})"
+      log_info "Claude CLI installed to: ~/.local/bin/claude"
+    else
+      log_error "Claude CLI installation completed but command not found"
+      return "${EXIT_DEVTOOLS_FAILED}"
+    fi
+  else
+    log_error "Failed to install Claude Code CLI"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+install_codex_cli() {
+  section "Installing OpenAI Codex CLI"
+
+  # Check if already installed
+  if npm list -g @openai/codex &>/dev/null; then
+    local codex_version
+    codex_version=$(codex --version 2>/dev/null || echo "unknown")
+    log_success "OpenAI Codex CLI is already installed (${codex_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install @openai/codex via npm"
+    return 0
+  fi
+
+  # Check if npm is available
+  if ! command_exists npm; then
+    log_error "npm is not available - cannot install Codex CLI"
+    log_info "Install Node.js first or use --skip-devtools"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
+  # Install Codex CLI via npm
+  log_info "Installing OpenAI Codex CLI via npm..."
+  if npm install -g @openai/codex 2>&1 | tee -a "${LOG_FILE}"; then
+    local codex_version
+    codex_version=$(codex --version 2>/dev/null || echo "unknown")
+    log_success "OpenAI Codex CLI installed successfully (${codex_version})"
+  else
+    log_error "Failed to install OpenAI Codex CLI"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
 setup_microsoft_products_repo() {
   local repo_file="/etc/apt/sources.list.d/microsoft-prod.list"
   local gpg_key="/usr/share/keyrings/microsoft-prod.gpg"
@@ -923,6 +996,8 @@ main() {
 
     # Phase 3: Developer tools (unless --skip-devtools)
     if [[ "${SKIP_DEVTOOLS}" != true ]]; then
+      install_claude_cli
+      install_codex_cli
       install_powershell
       install_github_cli
       install_jq
