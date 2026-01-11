@@ -66,6 +66,7 @@ DRY_RUN=false
 QUIET=false
 SKIP_SECURITY=false
 SKIP_APPS=false
+SKIP_DEVTOOLS=false
 SKIP_EXTENSIONS=false
 SKIP_FASTFETCH=false
 SECURITY_ONLY=false
@@ -102,6 +103,7 @@ readonly EXIT_USG_FAILED=7
 readonly EXIT_APP_INSTALL_FAILED=8
 readonly EXIT_EXTENSION_FAILED=9
 readonly EXIT_PREREQ_FAILED=10
+readonly EXIT_DEVTOOLS_FAILED=11
 
 # -----------------------------------------------------------------------------
 # Help and Version
@@ -116,6 +118,7 @@ Ubuntu 24.04 LTS Workstation Installation Script
 Installs and configures:
   - Ubuntu Security Guide (USG) with CIS benchmarks
   - Microsoft Edge and Visual Studio Code
+  - Developer tools (PowerShell, GitHub CLI, jq)
   - GNOME dash-to-panel extension
   - Fastfetch system information tool
 
@@ -124,6 +127,7 @@ Options:
     -q, --quiet                Suppress non-essential output
     --skip-security            Skip USG/CIS hardening
     --skip-apps                Skip MS Edge and VS Code installation
+    --skip-devtools            Skip developer tools (PowerShell, gh, jq)
     --skip-extensions          Skip GNOME extension installation
     --skip-fastfetch           Skip fastfetch installation
     --security-only            Only run security hardening
@@ -143,6 +147,7 @@ Examples:
     sudo ${SCRIPT_NAME}                      # Full installation
     sudo ${SCRIPT_NAME} --dry-run            # Preview changes
     sudo ${SCRIPT_NAME} --skip-security      # Skip CIS hardening
+    sudo ${SCRIPT_NAME} --skip-devtools      # Skip PowerShell, gh, jq
     sudo ${SCRIPT_NAME} --security-only      # Only run CIS hardening
     sudo ${SCRIPT_NAME} --apps-only          # Only install Edge and VS Code
 
@@ -155,6 +160,7 @@ Exit Codes:
     8  - Application installation failed
     9  - Extension installation failed
     10 - Prerequisites check failed
+    11 - Developer tools installation failed
 EOF
 }
 
@@ -184,6 +190,10 @@ parse_args() {
         ;;
       --skip-apps)
         SKIP_APPS=true
+        shift
+        ;;
+      --skip-devtools)
+        SKIP_DEVTOOLS=true
         shift
         ;;
       --skip-extensions)
@@ -562,6 +572,139 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
+# Developer Tools Functions
+# -----------------------------------------------------------------------------
+
+setup_microsoft_products_repo() {
+  local repo_file="/etc/apt/sources.list.d/microsoft-prod.list"
+  local gpg_key="/usr/share/keyrings/microsoft-prod.gpg"
+
+  if [[ -f "${repo_file}" ]]; then
+    log_info "Microsoft products repository already configured"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would configure Microsoft products repository"
+    log_info "[DRY-RUN] Would install GPG key: ${gpg_key}"
+    return 0
+  fi
+
+  log_info "Configuring Microsoft products repository..."
+
+  # Download and install Microsoft products GPG key
+  if curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/microsoft-prod.gpg 2>&1 | tee -a "${LOG_FILE}"; then
+    install -D -o root -g root -m 644 /tmp/microsoft-prod.gpg "${gpg_key}"
+    rm -f /tmp/microsoft-prod.gpg
+    log_success "Microsoft products GPG key installed"
+  else
+    log_error "Failed to install Microsoft products GPG key"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
+  # Create repository configuration
+  cat > "${repo_file}" << EOF
+deb [arch=amd64,arm64,armhf signed-by=${gpg_key}] https://packages.microsoft.com/ubuntu/24.04/prod noble main
+EOF
+
+  log_success "Microsoft products repository configured"
+
+  # Update package lists
+  if apt-get update 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Package lists updated"
+  else
+    log_warning "Package list update had issues (non-critical)"
+  fi
+}
+
+install_powershell() {
+  section "Installing PowerShell"
+
+  # Check if already installed
+  if dpkg -l | grep -q "^ii.*powershell "; then
+    local pwsh_version
+    pwsh_version=$(pwsh --version 2>/dev/null || echo "unknown")
+    log_success "PowerShell is already installed (${pwsh_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install PowerShell"
+    return 0
+  fi
+
+  # Setup Microsoft products repository
+  setup_microsoft_products_repo || return "${EXIT_DEVTOOLS_FAILED}"
+
+  # Install PowerShell
+  log_info "Installing PowerShell..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y powershell 2>&1 | tee -a "${LOG_FILE}"; then
+    local pwsh_version
+    pwsh_version=$(pwsh --version 2>/dev/null || echo "unknown")
+    log_success "PowerShell installed successfully (${pwsh_version})"
+  else
+    log_error "Failed to install PowerShell"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+install_github_cli() {
+  section "Installing GitHub CLI"
+
+  # Check if already installed
+  if dpkg -l | grep -q "^ii.*gh "; then
+    local gh_version
+    gh_version=$(gh --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "GitHub CLI is already installed (${gh_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install GitHub CLI (gh)"
+    return 0
+  fi
+
+  # Install from Ubuntu repositories
+  log_info "Installing GitHub CLI..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y gh 2>&1 | tee -a "${LOG_FILE}"; then
+    local gh_version
+    gh_version=$(gh --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "GitHub CLI installed successfully (${gh_version})"
+  else
+    log_error "Failed to install GitHub CLI"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+install_jq() {
+  section "Installing jq"
+
+  # Check if already installed
+  if dpkg -l | grep -q "^ii.*jq "; then
+    local jq_version
+    jq_version=$(jq --version 2>/dev/null || echo "unknown")
+    log_success "jq is already installed (${jq_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install jq"
+    return 0
+  fi
+
+  # Install from Ubuntu repositories
+  log_info "Installing jq..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y jq 2>&1 | tee -a "${LOG_FILE}"; then
+    local jq_version
+    jq_version=$(jq --version 2>/dev/null || echo "unknown")
+    log_success "jq installed successfully (${jq_version})"
+  else
+    log_error "Failed to install jq"
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # GNOME Extension Functions
 # -----------------------------------------------------------------------------
 
@@ -697,6 +840,7 @@ main() {
   log_info "Dry-run mode: ${DRY_RUN}"
   log_info "Skip security: ${SKIP_SECURITY}"
   log_info "Skip apps: ${SKIP_APPS}"
+  log_info "Skip devtools: ${SKIP_DEVTOOLS}"
   log_info "Skip extensions: ${SKIP_EXTENSIONS}"
   log_info "Skip fastfetch: ${SKIP_FASTFETCH}"
   log_info "Security only: ${SECURITY_ONLY}"
@@ -736,12 +880,19 @@ main() {
       install_vscode
     fi
 
-    # Phase 3: GNOME extensions (unless --skip-extensions)
+    # Phase 3: Developer tools (unless --skip-devtools)
+    if [[ "${SKIP_DEVTOOLS}" != true ]]; then
+      install_powershell
+      install_github_cli
+      install_jq
+    fi
+
+    # Phase 4: GNOME extensions (unless --skip-extensions)
     if [[ "${SKIP_EXTENSIONS}" != true ]]; then
       install_dash_to_panel
     fi
 
-    # Phase 4: Fastfetch (unless --skip-fastfetch)
+    # Phase 5: Fastfetch (unless --skip-fastfetch)
     if [[ "${SKIP_FASTFETCH}" != true ]]; then
       install_fastfetch
       configure_fastfetch
