@@ -19,7 +19,7 @@
       ansible.builtin.command: snap refresh --list
       register: snap_pending
       changed_when: false
-      failed_when: false
+      failed_when: false  # Returns non-zero when no updates available
 
     - name: Display pending snap updates
       ansible.builtin.debug:
@@ -29,14 +29,13 @@
     - name: Refresh all snap packages
       ansible.builtin.command: snap refresh
       register: snap_refresh
-      changed_when: "snap_refresh.rc == 0 and 'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))"
-      failed_when: false
+      changed_when: >-
+        snap_refresh.rc == 0 and
+        'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))
+      failed_when: >-
+        snap_refresh.rc != 0 and
+        'All snaps up to date' not in snap_refresh.stderr | default('')
 
     - name: Display snap refresh results
       ansible.builtin.debug:
         msg: "{{ snap_refresh.stdout_lines | default(['No snap output']) }}"
-
-    - name: Warn if snap refresh reported errors
-      ansible.builtin.debug:
-        msg: "Warning: snap refresh reported errors"
-      when: snap_refresh.rc != 0

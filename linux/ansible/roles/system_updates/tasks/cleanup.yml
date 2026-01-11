@@ -8,9 +8,9 @@
 - name: Clean package cache (autoclean)
   ansible.builtin.apt:
     autoclean: true
-  when: not (_compat_apt_full_clean | default(apt_full_clean))
+  when: not apt_full_clean
 
 - name: Clean package cache (full clean)
   ansible.builtin.command: apt-get clean
-  when: _compat_apt_full_clean | default(apt_full_clean)
+  when: apt_full_clean
   changed_when: false  # Idempotent cleanup operation

@@ -68,15 +68,15 @@
           ================================================
           Update Configuration
           ================================================
-          APT updates: {{ _compat_update_apt | default(update_apt) | default(true) }}
-          Snap updates: {{ _compat_update_snap | default(update_snap) | default(true) }}
-          Flatpak updates: {{ _compat_update_flatpak | default(update_flatpak) | default(true) }}
-          NPM updates: {{ _compat_update_npm | default(update_npm) | default(true) }}
-          Firmware updates: {{ _compat_update_firmware | default(update_firmware) | default(false) }}
-          Node.js upgrade: {{ _compat_update_nodejs | default(update_nodejs) | default(false) }}
-          Full cache clean: {{ _compat_apt_full_clean | default(apt_full_clean) | default(false) }}
-          {% if _compat_update_nodejs | default(update_nodejs) | default(false) %}
-          Target Node.js version: {{ nodejs_version | default('20') }}.x (NodeSource APT)
+          APT updates: {{ update_apt }}
+          Snap updates: {{ update_snap }}
+          Flatpak updates: {{ update_flatpak }}
+          NPM updates: {{ update_npm }}
+          Firmware updates: {{ update_firmware }}
+          Node.js upgrade: {{ update_nodejs }}
+          Full cache clean: {{ apt_full_clean }}
+          {% if update_nodejs %}
+          Target Node.js version: {{ nodejs_version }}.x (NodeSource APT)
           {% endif %}
           ================================================
       tags: always

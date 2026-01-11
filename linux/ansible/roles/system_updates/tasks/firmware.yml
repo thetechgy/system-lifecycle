@@ -28,12 +28,14 @@
       ansible.builtin.command: fwupdmgr refresh --force
       register: fwupd_refresh
       changed_when: false
+      # Metadata refresh may fail if no remotes configured - not critical
       failed_when: false
 
     - name: Check for available firmware updates
       ansible.builtin.command: fwupdmgr get-updates
       register: fwupd_available
       changed_when: false
+      # Returns non-zero when no updates available
       failed_when: false
 
     - name: Display available firmware updates
@@ -44,13 +46,12 @@
       ansible.builtin.command: fwupdmgr update -y
       register: fwupd_update
       changed_when: "'Successfully installed' in fwupd_update.stdout"
-      failed_when: false
+      failed_when: >-
+        fwupd_update.rc != 0 and
+        'No updatable devices' not in fwupd_update.stderr | default('') and
+        'No updates available' not in fwupd_update.stderr | default('') and
+        'Nothing to do' not in fwupd_update.stdout | default('')
 
     - name: Display firmware update results
       ansible.builtin.debug:
         msg: "{{ (fwupd_update.stdout_lines | default([])) + (fwupd_update.stderr_lines | default([])) }}"
-
-    - name: Warn if firmware update reported errors
-      ansible.builtin.debug:
-        msg: "Warning: firmware update reported errors"
-      when: fwupd_update.rc != 0

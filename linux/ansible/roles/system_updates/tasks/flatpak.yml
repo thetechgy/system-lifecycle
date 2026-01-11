@@ -19,14 +19,20 @@
       ansible.builtin.command: flatpak update -y --system
       register: flatpak_system_update
       changed_when: "'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))"
-      failed_when: false
+      failed_when: >-
+        flatpak_system_update.rc != 0 and
+        'Nothing to do' not in flatpak_system_update.stderr | default('') and
+        'No remote refs found' not in flatpak_system_update.stderr | default('')
       become: true
 
     - name: Update user flatpak packages
       ansible.builtin.command: flatpak update -y --user
       register: flatpak_user_update
       changed_when: "'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))"
-      failed_when: false
+      failed_when: >-
+        flatpak_user_update.rc != 0 and
+        'Nothing to do' not in flatpak_user_update.stderr | default('') and
+        'No remote refs found' not in flatpak_user_update.stderr | default('')
       become: false
       environment:
         HOME: "{{ ansible_user_dir }}"
@@ -37,14 +43,4 @@
         msg: |
           System scope: {{ flatpak_system_update.stdout | default('Nothing to do') }}
           User scope: {{ flatpak_user_update.stdout | default('Nothing to do') }}
-
-    - name: Warn if flatpak system update reported errors
-      ansible.builtin.debug:
-        msg: "Warning: flatpak system update reported errors"
-      when: flatpak_system_update.rc != 0
-
-    - name: Warn if flatpak user update reported errors
-      ansible.builtin.debug:
-        msg: "Warning: flatpak user update reported errors"
-      when: flatpak_user_update.rc != 0
   when: flatpak_check.rc == 0

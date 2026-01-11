@@ -4,7 +4,7 @@ This directory contains Ansible playbooks that replicate the functionality of th
 
 ## Prerequisites
 
-- Ansible 2.9+ installed (`pip install ansible` or `apt install ansible`)
+- Ansible 2.15+ installed (`pip install ansible` or `apt install ansible`)
 - Python 3.8+
 
 ## Quick Start
@@ -34,18 +34,18 @@ Comprehensive system update playbook equivalent to `update-system.sh`.
 ansible-playbook playbooks/update-system.yml
 
 # Skip specific package managers
-ansible-playbook playbooks/update-system.yml -e "skip_snap=true"
-ansible-playbook playbooks/update-system.yml -e "skip_snap=true skip_npm=true skip_flatpak=true"
+ansible-playbook playbooks/update-system.yml -e "update_snap=false"
+ansible-playbook playbooks/update-system.yml -e "update_snap=false update_npm=false update_flatpak=false"
 
 # Enable firmware updates (opt-in, auto-skipped on WSL)
-ansible-playbook playbooks/update-system.yml -e "run_firmware=true"
+ansible-playbook playbooks/update-system.yml -e "update_firmware=true"
 
 # Full cache clean instead of autoclean
-ansible-playbook playbooks/update-system.yml -e "run_clean=true"
+ansible-playbook playbooks/update-system.yml -e "apt_full_clean=true"
 
 # Upgrade Node.js via NodeSource APT
-ansible-playbook playbooks/update-system.yml -e "upgrade_nodejs=true"
-ansible-playbook playbooks/update-system.yml -e "upgrade_nodejs=true nodejs_version=20"
+ansible-playbook playbooks/update-system.yml -e "update_nodejs=true"
+ansible-playbook playbooks/update-system.yml -e "update_nodejs=true nodejs_version=22"
 
 # Run only specific updates using tags
 ansible-playbook playbooks/update-system.yml --tags apt
@@ -55,12 +55,13 @@ ansible-playbook playbooks/update-system.yml --tags "apt,npm"
 **Variables:**
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `skip_snap` | `false` | Skip snap package updates |
-| `skip_flatpak` | `false` | Skip flatpak package updates |
-| `skip_npm` | `false` | Skip npm global package updates |
-| `run_firmware` | `false` | Enable firmware updates (opt-in) |
-| `run_clean` | `false` | Use `apt-get clean` instead of `autoclean` |
-| `upgrade_nodejs` | `false` | Upgrade Node.js via NodeSource APT |
+| `update_apt` | `true` | Enable/disable APT package updates |
+| `update_snap` | `true` | Enable/disable snap package updates |
+| `update_flatpak` | `true` | Enable/disable flatpak package updates |
+| `update_npm` | `true` | Enable/disable npm global package updates |
+| `update_firmware` | `false` | Enable firmware updates (opt-in) |
+| `update_nodejs` | `false` | Enable Node.js upgrade via NodeSource APT |
+| `apt_full_clean` | `false` | Use `apt-get clean` instead of `autoclean` |
 | `nodejs_version` | `"20"` | Node.js major version for NodeSource APT |
 
 **Tags:**
@@ -102,19 +103,26 @@ ansible/
 ├── ansible.cfg              # Ansible configuration
 ├── inventory/
 │   └── localhost.yml        # Localhost inventory
-├── group_vars/
-│   └── all.yml              # Default variables
 ├── playbooks/
 │   ├── update-system.yml    # System update playbook
 │   └── configure-bashrc.yml # Bashrc configuration playbook
 └── roles/
-    ├── apt_updates/         # APT package management
-    ├── snap_updates/        # Snap package refresh
-    ├── flatpak_updates/     # Flatpak updates
-    ├── npm_updates/         # NPM global package updates
-    ├── nodejs_upgrade/      # Node.js upgrade via NodeSource APT
-    ├── firmware_updates/    # Firmware updates via fwupdmgr
+    ├── system_updates/      # System update orchestration role
+    │   ├── defaults/main.yml    # Default variables
+    │   ├── handlers/main.yml    # Reboot notification handler
+    │   ├── vars/main.yml        # Internal variables
+    │   └── tasks/
+    │       ├── main.yml         # Task orchestrator
+    │       ├── apt.yml          # APT package updates
+    │       ├── snap.yml         # Snap package refresh
+    │       ├── flatpak.yml      # Flatpak updates
+    │       ├── npm.yml          # NPM global package updates
+    │       ├── nodejs.yml       # Node.js upgrade via NodeSource
+    │       ├── firmware.yml     # Firmware updates via fwupdmgr
+    │       └── cleanup.yml      # APT cleanup tasks
     └── bashrc_config/       # Bashrc alias configuration
+        ├── defaults/main.yml
+        └── tasks/main.yml
 ```
 
 ## Comparison with Shell Scripts
@@ -128,7 +136,7 @@ ansible/
 | Firmware updates | Native | Shell command |
 | WSL detection | `/proc/version` | `ansible_kernel` fact |
 | Dry-run mode | `--dry-run` flag | `--check` mode |
-| Selective skip | `--no-snap` flags | `-e "skip_snap=true"` |
+| Selective skip | `--no-snap` flags | `-e "update_snap=false"` |
 | Custom exit codes | Yes (0-6) | No (Ansible uses 0/1/2/4) |
 | Timestamped logs | Yes | Requires callback plugin |
 
@@ -136,7 +144,7 @@ ansible/
 
 - **WSL Detection**: Firmware updates are automatically skipped when running on WSL
 - **User Scope**: Flatpak and npm updates run as the invoking user to target per-user installs
-- **Node.js Source**: `upgrade_nodejs=true` adds the NodeSource APT repo and installs `nodejs`
+- **Node.js Source**: `update_nodejs=true` adds the NodeSource APT repo and installs `nodejs`
 - **Check Mode**: Use `--check` for dry-run. Note that Ansible's check mode is all-or-nothing and won't show detailed `apt upgrade --dry-run` output like the shell script
 - **Idempotency**: All playbooks are idempotent and safe to run multiple times
 - **Privilege Escalation**: The `update-system.yml` playbook uses `become: true` (sudo)
