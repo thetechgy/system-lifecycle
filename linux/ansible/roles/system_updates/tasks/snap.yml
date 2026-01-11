@@ -12,35 +12,31 @@
     msg: "snap is not installed, skipping snap updates"
   when: snap_check.rc != 0
 
-- name: Check for pending snap updates (info only)
-  ansible.builtin.command: snap refresh --list
-  register: snap_pending
-  changed_when: false
-  failed_when: false
+- name: Snap update tasks
   when: snap_check.rc == 0
+  block:
+    - name: Check for pending snap updates (info only)
+      ansible.builtin.command: snap refresh --list
+      register: snap_pending
+      changed_when: false
+      failed_when: false
 
-- name: Display pending snap updates
-  ansible.builtin.debug:
-    msg: "{{ snap_pending.stdout_lines }}"
-  when:
-    - snap_check.rc == 0
-    - snap_pending.stdout | length > 0
+    - name: Display pending snap updates
+      ansible.builtin.debug:
+        msg: "{{ snap_pending.stdout_lines }}"
+      when: snap_pending.stdout | length > 0
 
-- name: Refresh all snap packages
-  ansible.builtin.command: snap refresh
-  register: snap_refresh
-  changed_when: "snap_refresh.rc == 0 and 'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))"
-  failed_when: false
-  when: snap_check.rc == 0
+    - name: Refresh all snap packages
+      ansible.builtin.command: snap refresh
+      register: snap_refresh
+      changed_when: "snap_refresh.rc == 0 and 'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))"
+      failed_when: false
 
-- name: Display snap refresh results
-  ansible.builtin.debug:
-    msg: "{{ snap_refresh.stdout_lines | default(['No snap output']) }}"
-  when: snap_check.rc == 0
+    - name: Display snap refresh results
+      ansible.builtin.debug:
+        msg: "{{ snap_refresh.stdout_lines | default(['No snap output']) }}"
 
-- name: Warn if snap refresh reported errors
-  ansible.builtin.debug:
-    msg: "Warning: snap refresh reported errors"
-  when:
-    - snap_check.rc == 0
-    - snap_refresh.rc != 0
+    - name: Warn if snap refresh reported errors
+      ansible.builtin.debug:
+        msg: "Warning: snap refresh reported errors"
+      when: snap_refresh.rc != 0

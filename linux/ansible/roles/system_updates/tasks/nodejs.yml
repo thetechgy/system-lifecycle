@@ -1,6 +1,13 @@
 ---
 # Node.js upgrade tasks via NodeSource APT repository
 
+- name: Ensure gnupg is installed for GPG key management
+  ansible.builtin.apt:
+    name: gnupg
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
 - name: Ensure keyrings directory exists
   ansible.builtin.file:
     path: /etc/apt/keyrings
@@ -17,8 +24,6 @@
 - name: Convert and install NodeSource GPG key
   ansible.builtin.shell: |
     gpg --batch --yes --dearmor -o {{ nodejs_nodesource_keyring }} /tmp/nodesource.gpg.key
-  args:
-    creates: "{{ nodejs_nodesource_keyring }}"
   when: nodesource_key_download is changed
 
 - name: Ensure GPG key has correct permissions

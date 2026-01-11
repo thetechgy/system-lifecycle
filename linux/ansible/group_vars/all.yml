@@ -37,6 +37,7 @@ bashrc_state: present  # 'present' or 'absent'
 
 # Map old skip_* variables (inverted logic) to new update_* variables
 # Usage: -e "skip_snap=true" still works but is deprecated
+_compat_update_apt: "{{ (not (skip_apt | bool)) if skip_apt is defined else update_apt }}"
 _compat_update_snap: "{{ (not (skip_snap | bool)) if skip_snap is defined else update_snap }}"
 _compat_update_flatpak: "{{ (not (skip_flatpak | bool)) if skip_flatpak is defined else update_flatpak }}"
 _compat_update_npm: "{{ (not (skip_npm | bool)) if skip_npm is defined else update_npm }}"

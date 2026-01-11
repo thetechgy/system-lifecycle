@@ -2,17 +2,26 @@
 # Bashrc alias configuration tasks
 # Replicates functionality from configure-bashrc.sh
 
-- name: Get repository root path
+- name: Check if git is available
+  ansible.builtin.command: command -v git
+  register: git_check
+  changed_when: false
+  failed_when: false
+  become: false
+
+- name: Get repository root path via git
   ansible.builtin.command: git rev-parse --show-toplevel
   args:
     chdir: "{{ playbook_dir }}"
   register: git_root
   changed_when: false
+  failed_when: false
   become: false
+  when: git_check.rc == 0
 
 - name: Set repository root fact
   ansible.builtin.set_fact:
-    repo_root: "{{ git_root.stdout }}"
+    repo_root: "{{ git_root.stdout if (git_root.rc | default(1)) == 0 else (playbook_dir | dirname | dirname) }}"
 
 - name: Check if .bashrc exists
   ansible.builtin.stat:
@@ -37,7 +46,7 @@
     marker_end: "<<< system-lifecycle <<<"
     block: |
       # Aliases managed by system-lifecycle - do not edit manually
-      alias update-system='cd {{ repo_root }}/linux/ansible && ansible-playbook playbooks/update-system.yml'
+      alias update-system='cd {{ repo_root }}/linux/ansible && ansible-playbook -i inventory/localhost.yml playbooks/update-system.yml'
     state: "{{ bashrc_state }}"
     backup: true
   register: bashrc_update

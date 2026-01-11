@@ -4,6 +4,7 @@
 
 - name: APT package updates
   ansible.builtin.include_tasks: apt.yml
+  when: _compat_update_apt | default(update_apt)
   tags: [apt, update]
 
 - name: Snap package updates
@@ -33,4 +34,5 @@
 
 - name: APT cleanup
   ansible.builtin.include_tasks: cleanup.yml
+  when: _compat_update_apt | default(update_apt)
   tags: [apt, update]
