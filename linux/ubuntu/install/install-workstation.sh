@@ -710,8 +710,65 @@ usg_fix() {
 }
 
 # -----------------------------------------------------------------------------
+# Security Phase Coordinator
+# -----------------------------------------------------------------------------
+
+run_security_phase() {
+  if [[ "${SKIP_SECURITY}" == true ]]; then
+    log_info "Skipping security hardening (disabled by flag or environment)"
+    return 0
+  fi
+
+  if [[ "${SKIP_UBUNTU_PRO}" == true ]]; then
+    if pro_is_attached; then
+      log_info "Ubuntu Pro is already attached; continuing with USG/CIS hardening"
+    else
+      log_warning "Skipping USG/CIS hardening because --skip-ubuntu-pro is set and the system is not attached"
+      log_warning "Attach to Ubuntu Pro or rerun without --skip-ubuntu-pro to enable hardening"
+      return 0
+    fi
+  else
+    pro_enroll
+  fi
+
+  usg_install
+  usg_audit
+  usg_fix
+}
+
+# -----------------------------------------------------------------------------
 # Microsoft Applications Functions
 # -----------------------------------------------------------------------------
+
+ensure_microsoft_repo_dependencies() {
+  local packages=()
+
+  if ! command_exists curl; then
+    packages+=("curl")
+  fi
+
+  if ! command_exists gpg; then
+    packages+=("gnupg")
+  fi
+
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install repository dependencies: ${packages[*]}"
+    return 0
+  fi
+
+  log_info "Installing repository dependencies: ${packages[*]}"
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Repository dependencies installed: ${packages[*]}"
+    return 0
+  fi
+
+  log_error "Failed to install repository dependencies: ${packages[*]}"
+  return 1
+}
 
 setup_microsoft_gpg() {
   local gpg_key="/usr/share/keyrings/microsoft.gpg"
@@ -719,6 +776,10 @@ setup_microsoft_gpg() {
   if [[ -f "${gpg_key}" ]]; then
     log_info "Microsoft GPG key already installed"
     return 0
+  fi
+
+  if ! ensure_microsoft_repo_dependencies; then
+    return "${EXIT_APP_INSTALL_FAILED}"
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
@@ -1033,6 +1094,10 @@ setup_microsoft_products_repo() {
     return 0
   fi
 
+  if ! ensure_microsoft_repo_dependencies; then
+    return "${EXIT_DEVTOOLS_FAILED}"
+  fi
+
   if [[ "${DRY_RUN}" == true ]]; then
     log_info "[DRY-RUN] Would configure Microsoft products repository"
     log_info "[DRY-RUN] Would install GPG key: ${gpg_key}"
@@ -1189,11 +1254,20 @@ install_ripgrep() {
 install_fd() {
   section "Installing fd"
 
-  # Check if already installed (package is fd-find)
-  if dpkg-query -W -f='${Status}' fd-find 2>/dev/null | grep -q "^install ok installed$"; then
+  # Check if already installed (fd or fdfind)
+  if command_exists fd || command_exists fdfind; then
+    local fd_cmd="fd"
+    if ! command_exists fd; then
+      fd_cmd="fdfind"
+    fi
     local fd_version
-    fd_version=$(fd --version 2>/dev/null || echo "unknown")
+    fd_version=$("${fd_cmd}" --version 2>/dev/null || echo "unknown")
     log_success "fd is already installed (${fd_version})"
+    if [[ "${fd_cmd}" == "fdfind" ]]; then
+      if ! ensure_fd_symlink; then
+        log_warning "fd is available as 'fdfind' (symlink not created)"
+      fi
+    fi
     return 0
   fi
 
@@ -1206,12 +1280,49 @@ install_fd() {
   log_info "Installing fd (fd-find package)..."
   if DEBIAN_FRONTEND=noninteractive apt-get install -y fd-find 2>&1 | tee -a "${LOG_FILE}"; then
     local fd_version
-    fd_version=$(fd --version 2>/dev/null || echo "unknown")
+    if ! ensure_fd_symlink; then
+      log_warning "fd is available as 'fdfind' (symlink not created)"
+    fi
+    if command_exists fd; then
+      fd_version=$(fd --version 2>/dev/null || echo "unknown")
+    else
+      fd_version=$(fdfind --version 2>/dev/null || echo "unknown")
+    fi
     log_success "fd installed successfully (${fd_version})"
   else
     log_error "Failed to install fd"
     return "${EXIT_DEVTOOLS_FAILED}"
   fi
+}
+
+ensure_fd_symlink() {
+  if command_exists fd; then
+    return 0
+  fi
+
+  local fdfind_path
+  fdfind_path=$(command -v fdfind 2>/dev/null || true)
+
+  if [[ -z "${fdfind_path}" ]]; then
+    return 1
+  fi
+
+  local fd_target="/usr/local/bin/fd"
+  if [[ -e "${fd_target}" ]]; then
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would create symlink: ${fd_target} -> ${fdfind_path}"
+    return 0
+  fi
+
+  if ln -s "${fdfind_path}" "${fd_target}"; then
+    log_success "Created fd symlink: ${fd_target} -> ${fdfind_path}"
+    return 0
+  fi
+
+  return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -1718,10 +1829,7 @@ main() {
   # Execution based on flags
   if [[ "${SECURITY_ONLY}" == true ]]; then
     # Security hardening only
-    pro_enroll
-    usg_install
-    usg_audit
-    usg_fix
+    run_security_phase
   elif [[ "${APPS_ONLY}" == true ]]; then
     # Applications only
     setup_microsoft_gpg
@@ -1732,12 +1840,7 @@ main() {
     # Full installation
 
     # Phase 1: Security hardening (unless --skip-security)
-    if [[ "${SKIP_SECURITY}" != true ]]; then
-      pro_enroll
-      usg_install
-      usg_audit
-      usg_fix
-    fi
+    run_security_phase
 
     # Phase 2: Applications (unless --skip-apps)
     if [[ "${SKIP_APPS}" != true ]]; then
