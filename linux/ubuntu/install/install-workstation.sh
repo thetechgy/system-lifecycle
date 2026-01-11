@@ -42,7 +42,7 @@
 #
 # Author: Travis McDade
 # License: MIT
-# Version: 1.1.0
+# Version: 1.2.0
 
 set -o errexit   # Exit on error
 set -o nounset   # Exit on undefined variable
@@ -54,7 +54,7 @@ set -o pipefail  # Catch pipeline failures
 
 SCRIPT_NAME="$(basename "${0}")"
 readonly SCRIPT_NAME
-readonly SCRIPT_VERSION="1.1.0"
+readonly SCRIPT_VERSION="1.2.0"
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 readonly SCRIPT_DIR
 readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
@@ -117,7 +117,7 @@ Ubuntu 24.04 LTS Workstation Installation Script
 
 Installs and configures:
   - Ubuntu Security Guide (USG) with CIS benchmarks
-  - Microsoft Edge and Visual Studio Code
+  - Microsoft Edge, Visual Studio Code, and Discord
   - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
   - Developer tools (PowerShell, GitHub CLI, jq)
   - GNOME extensions (dash-to-panel, Vitals)
@@ -568,6 +568,33 @@ EOF
     log_success "Visual Studio Code installed successfully (${code_version})"
   else
     log_error "Failed to install Visual Studio Code"
+    return "${EXIT_APP_INSTALL_FAILED}"
+  fi
+}
+
+install_discord() {
+  section "Installing Discord"
+
+  # Check if already installed
+  if dpkg -l | grep -q "^ii.*discord "; then
+    local discord_version
+    discord_version=$(discord --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "Discord is already installed (${discord_version})"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install Discord from Ubuntu repositories"
+    return 0
+  fi
+
+  log_info "Installing Discord from Ubuntu repositories..."
+  if DEBIAN_FRONTEND=noninteractive apt-get install -y discord 2>&1 | tee -a "${LOG_FILE}"; then
+    local discord_version
+    discord_version=$(discord --version 2>/dev/null | head -1 || echo "unknown")
+    log_success "Discord installed successfully (${discord_version})"
+  else
+    log_error "Failed to install Discord"
     return "${EXIT_APP_INSTALL_FAILED}"
   fi
 }
@@ -1095,6 +1122,7 @@ main() {
     setup_microsoft_gpg
     install_edge
     install_vscode
+    install_discord
   else
     # Full installation
 
@@ -1110,6 +1138,7 @@ main() {
       setup_microsoft_gpg
       install_edge
       install_vscode
+      install_discord
     fi
 
     # Phase 3: Developer tools (unless --skip-devtools)
