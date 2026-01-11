@@ -42,7 +42,7 @@
 #
 # Author: Travis McDade
 # License: MIT
-# Version: 1.0.0
+# Version: 1.1.0
 
 set -o errexit   # Exit on error
 set -o nounset   # Exit on undefined variable
@@ -54,7 +54,7 @@ set -o pipefail  # Catch pipeline failures
 
 SCRIPT_NAME="$(basename "${0}")"
 readonly SCRIPT_NAME
-readonly SCRIPT_VERSION="1.0.0"
+readonly SCRIPT_VERSION="1.1.0"
 SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
 readonly SCRIPT_DIR
 readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
@@ -120,7 +120,7 @@ Installs and configures:
   - Microsoft Edge and Visual Studio Code
   - AI CLI tools (Claude Code CLI, OpenAI Codex CLI)
   - Developer tools (PowerShell, GitHub CLI, jq)
-  - GNOME dash-to-panel extension
+  - GNOME extensions (dash-to-panel, Vitals)
   - Fastfetch system information tool
 
 Options:
@@ -858,6 +858,124 @@ configure_dash_to_panel() {
 }
 
 # -----------------------------------------------------------------------------
+# Vitals Extension Functions
+# -----------------------------------------------------------------------------
+
+install_vitals() {
+  if [[ "${SKIP_EXTENSIONS}" == true ]]; then
+    return 0
+  fi
+
+  section "Installing Vitals GNOME Extension"
+
+  # Check GNOME Shell is running
+  if ! pgrep -x gnome-shell >/dev/null; then
+    log_warning "GNOME Shell is not running, skipping Vitals installation"
+    return 0
+  fi
+
+  # Check if already installed
+  if gnome-extensions list 2>/dev/null | grep -q "Vitals@CoreCoding.com"; then
+    log_success "Vitals extension is already installed"
+    configure_vitals
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would install Vitals extension from GNOME Extensions"
+    log_info "[DRY-RUN] Would configure Vitals from configs/vitals.dconf"
+    return 0
+  fi
+
+  # Get GNOME Shell version for API query
+  local gnome_version
+  gnome_version=$(gnome-shell --version | grep -oP '\d+\.\d+' | cut -d. -f1)
+
+  log_info "Detected GNOME Shell version: ${gnome_version}"
+  log_info "Downloading Vitals extension from extensions.gnome.org..."
+
+  # Query API for correct version
+  local extension_info
+  extension_info=$(curl -s "https://extensions.gnome.org/extension-info/?uuid=Vitals@CoreCoding.com")
+
+  if [[ -z "${extension_info}" ]]; then
+    log_error "Failed to query GNOME Extensions API"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  # Extract version_tag for current GNOME Shell version
+  local version_tag
+  version_tag=$(echo "${extension_info}" | jq -r ".shell_version_map.\"${gnome_version}\".pk" 2>/dev/null)
+
+  if [[ -z "${version_tag}" || "${version_tag}" == "null" ]]; then
+    log_error "Vitals extension not available for GNOME Shell ${gnome_version}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  log_info "Extension version tag: ${version_tag}"
+
+  # Download extension
+  local download_url="https://extensions.gnome.org/download-extension/Vitals@CoreCoding.com.shell-extension.zip?version_tag=${version_tag}"
+  local temp_zip="/tmp/vitals-extension.zip"
+
+  if ! curl -fsSL -o "${temp_zip}" "${download_url}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_error "Failed to download Vitals extension"
+    rm -f "${temp_zip}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+
+  # Install extension using gnome-extensions
+  log_info "Installing Vitals extension..."
+  if gnome-extensions install --force "${temp_zip}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Vitals extension installed successfully"
+    rm -f "${temp_zip}"
+
+    # Configure the extension
+    configure_vitals
+  else
+    log_error "Failed to install Vitals extension"
+    rm -f "${temp_zip}"
+    return "${EXIT_EXTENSION_FAILED}"
+  fi
+}
+
+configure_vitals() {
+  local config_file="${SCRIPT_DIR}/configs/vitals.dconf"
+
+  # Check if config file exists
+  if [[ ! -f "${config_file}" ]]; then
+    log_warning "Vitals config file not found at ${config_file}, skipping configuration"
+    log_info "Extension installed but not configured - use GNOME Extensions app to configure manually"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN}" == true ]]; then
+    log_info "[DRY-RUN] Would load Vitals configuration from ${config_file}"
+    log_info "[DRY-RUN] Would enable Vitals@CoreCoding.com extension"
+    return 0
+  fi
+
+  log_info "Configuring Vitals extension..."
+
+  # Enable the extension first
+  if gnome-extensions enable Vitals@CoreCoding.com 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Vitals extension enabled"
+  else
+    log_warning "Failed to enable Vitals extension (may need manual activation)"
+  fi
+
+  # Load dconf configuration
+  if dconf load /org/gnome/shell/extensions/vitals/ < "${config_file}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log_success "Vitals configuration applied"
+    log_info "Configuration will take effect after GNOME Shell restart (Alt+F2, type 'r', press Enter)"
+    log_info "Or logout/login for changes to take effect"
+  else
+    log_warning "Failed to load Vitals configuration"
+    return 1
+  fi
+}
+
+# -----------------------------------------------------------------------------
 # Fastfetch Functions
 # -----------------------------------------------------------------------------
 
@@ -1006,6 +1124,7 @@ main() {
     # Phase 4: GNOME extensions (unless --skip-extensions)
     if [[ "${SKIP_EXTENSIONS}" != true ]]; then
       install_dash_to_panel
+      install_vitals
     fi
 
     # Phase 5: Fastfetch (unless --skip-fastfetch)
