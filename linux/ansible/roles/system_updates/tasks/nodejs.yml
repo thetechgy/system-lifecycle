@@ -1,54 +1,58 @@
 ---
 # Node.js upgrade tasks via NodeSource APT repository
 
-- name: Ensure gnupg is installed for GPG key management
-  ansible.builtin.apt:
-    name: gnupg
-    state: present
-  environment:
-    DEBIAN_FRONTEND: noninteractive
+- name: Configure Node.js APT repo and install package
+  block:
+    - name: Ensure gnupg is installed for GPG key management
+      ansible.builtin.apt:
+        name: gnupg
+        state: present
+      environment:
+        DEBIAN_FRONTEND: noninteractive
 
-- name: Ensure keyrings directory exists
-  ansible.builtin.file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: "0755"
+    - name: Ensure keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
-- name: Download NodeSource GPG key
-  ansible.builtin.get_url:
-    url: "{{ nodejs_nodesource_key_url }}"
-    dest: /tmp/nodesource.gpg.key
-    mode: '0644'
-  register: nodesource_key_download
+    - name: Download NodeSource GPG key
+      ansible.builtin.get_url:
+        url: "{{ nodejs_nodesource_key_url }}"
+        dest: "{{ nodejs_nodesource_key_asc }}"
+        mode: '0644'
+      register: nodesource_key_download
 
-- name: Convert and install NodeSource GPG key
-  ansible.builtin.shell: |
-    gpg --batch --yes --dearmor -o {{ nodejs_nodesource_keyring }} /tmp/nodesource.gpg.key
-  when: nodesource_key_download is changed
+    - name: Check if NodeSource keyring exists
+      ansible.builtin.stat:
+        path: "{{ nodejs_nodesource_keyring }}"
+      register: nodesource_keyring_stat
 
-- name: Ensure GPG key has correct permissions
-  ansible.builtin.file:
-    path: "{{ nodejs_nodesource_keyring }}"
-    mode: '0644'
+    - name: Convert and install NodeSource GPG key
+      ansible.builtin.command: >-
+        gpg --batch --yes --dearmor -o {{ nodejs_nodesource_keyring }}
+        {{ nodejs_nodesource_key_asc }}
+      when: nodesource_key_download is changed or not nodesource_keyring_stat.stat.exists
 
-- name: Remove temporary key file
-  ansible.builtin.file:
-    path: /tmp/nodesource.gpg.key
-    state: absent
+    - name: Ensure GPG key has correct permissions
+      ansible.builtin.file:
+        path: "{{ nodejs_nodesource_keyring }}"
+        mode: '0644'
 
-- name: Add NodeSource repository
-  ansible.builtin.apt_repository:
-    repo: "{{ nodejs_nodesource_repo }}"
-    filename: nodesource
-    state: present
-    update_cache: true
+    - name: Add NodeSource repository
+      ansible.builtin.apt_repository:
+        repo: "{{ nodejs_nodesource_repo }}"
+        filename: nodesource
+        state: present
+        update_cache: true
 
-- name: Install/upgrade Node.js
-  ansible.builtin.apt:
-    name: nodejs
-    state: latest
-  environment:
-    DEBIAN_FRONTEND: noninteractive
+    - name: Install/upgrade Node.js
+      ansible.builtin.apt:
+        name: nodejs
+        state: latest
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+  become: true
 
 - name: Display Node.js version
   ansible.builtin.command: node --version

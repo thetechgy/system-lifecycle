@@ -55,3 +55,4 @@
     - name: Display firmware update results
       ansible.builtin.debug:
         msg: "{{ (fwupd_update.stdout_lines | default([])) + (fwupd_update.stderr_lines | default([])) }}"
+  become: true

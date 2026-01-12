@@ -7,6 +7,7 @@
     cache_valid_time: 0
   environment:
     DEBIAN_FRONTEND: noninteractive
+  become: true
 
 - name: Dist-upgrade all packages
   ansible.builtin.apt:
@@ -14,3 +15,4 @@
   environment:
     DEBIAN_FRONTEND: noninteractive
   notify: "reboot may be required"
+  become: true

@@ -48,5 +48,5 @@
   when: npm_check.rc == 0
   become: false
   environment:
-    HOME: "{{ ansible_user_dir }}"
-    PATH: "{{ ansible_env.PATH }}"
+    HOME: "{{ lookup('ansible.builtin.env', 'HOME') }}"
+    PATH: "{{ lookup('ansible.builtin.env', 'PATH') }}"

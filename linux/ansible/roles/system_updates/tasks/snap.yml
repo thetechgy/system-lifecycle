@@ -34,8 +34,9 @@
         'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))
       failed_when: >-
         snap_refresh.rc != 0 and
-        'All snaps up to date' not in snap_refresh.stderr | default('')
+        'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))
 
     - name: Display snap refresh results
       ansible.builtin.debug:
         msg: "{{ snap_refresh.stdout_lines | default(['No snap output']) }}"
+  become: true

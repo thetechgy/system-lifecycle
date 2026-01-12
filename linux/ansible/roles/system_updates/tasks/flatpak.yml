@@ -35,8 +35,8 @@
         'No remote refs found' not in flatpak_user_update.stderr | default('')
       become: false
       environment:
-        HOME: "{{ ansible_user_dir }}"
-        PATH: "{{ ansible_env.PATH }}"
+        HOME: "{{ lookup('ansible.builtin.env', 'HOME') }}"
+        PATH: "{{ lookup('ansible.builtin.env', 'PATH') }}"
 
     - name: Display flatpak update results
       ansible.builtin.debug:

@@ -46,7 +46,7 @@
 - name: System Update Playbook
   hosts: localhost
   connection: local
-  become: true
+  become: false
 
   pre_tasks:
     - name: Check if running on WSL

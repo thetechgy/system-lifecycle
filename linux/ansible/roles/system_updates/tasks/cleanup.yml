@@ -4,13 +4,16 @@
 - name: Remove unused packages (autoremove)
   ansible.builtin.apt:
     autoremove: true
+  become: true
 
 - name: Clean package cache (autoclean)
   ansible.builtin.apt:
     autoclean: true
   when: not apt_full_clean
+  become: true
 
 - name: Clean package cache (full clean)
   ansible.builtin.command: apt-get clean
   when: apt_full_clean
   changed_when: false  # Idempotent cleanup operation
+  become: true
