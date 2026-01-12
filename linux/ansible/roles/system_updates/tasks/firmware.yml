@@ -15,6 +15,7 @@
       register: fwupdmgr_check
       changed_when: false
       failed_when: false
+      check_mode: no
 
     - name: Install fwupd if not present
       ansible.builtin.apt:
@@ -37,6 +38,7 @@
       changed_when: false
       # Returns non-zero when no updates available
       failed_when: false
+      check_mode: no
 
     - name: Display available firmware updates
       ansible.builtin.debug:
@@ -51,8 +53,15 @@
         'No updatable devices' not in fwupd_update.stderr | default('') and
         'No updates available' not in fwupd_update.stderr | default('') and
         'Nothing to do' not in fwupd_update.stdout | default('')
+      when: not ansible_check_mode
+
+    - name: Skip firmware updates in check mode
+      ansible.builtin.debug:
+        msg: "Check mode: skipping fwupdmgr update; run without --check to apply updates"
+      when: ansible_check_mode
 
     - name: Display firmware update results
       ansible.builtin.debug:
         msg: "{{ (fwupd_update.stdout_lines | default([])) + (fwupd_update.stderr_lines | default([])) }}"
+      when: not ansible_check_mode
   become: true

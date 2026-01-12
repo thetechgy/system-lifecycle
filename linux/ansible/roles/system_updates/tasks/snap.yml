@@ -6,6 +6,7 @@
   register: snap_check
   changed_when: false
   failed_when: false
+  check_mode: no
 
 - name: Skip message when snap not installed
   ansible.builtin.debug:
@@ -20,6 +21,7 @@
       register: snap_pending
       changed_when: false
       failed_when: false  # Returns non-zero when no updates available
+      check_mode: no
 
     - name: Display pending snap updates
       ansible.builtin.debug:
@@ -35,8 +37,15 @@
       failed_when: >-
         snap_refresh.rc != 0 and
         'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))
+      when: not ansible_check_mode
+
+    - name: Skip snap refresh in check mode
+      ansible.builtin.debug:
+        msg: "Check mode: skipping snap refresh; run without --check to apply updates"
+      when: ansible_check_mode
 
     - name: Display snap refresh results
       ansible.builtin.debug:
         msg: "{{ snap_refresh.stdout_lines | default(['No snap output']) }}"
+      when: not ansible_check_mode
   become: true

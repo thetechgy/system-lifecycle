@@ -6,6 +6,7 @@
   register: flatpak_check
   changed_when: false
   failed_when: false
+  check_mode: no
   become: false
 
 - name: Skip message when flatpak not installed
@@ -15,6 +16,34 @@
 
 - name: Update flatpak packages (both scopes)
   block:
+    - name: List system flatpak updates (check mode only)
+      ansible.builtin.command: flatpak remote-ls --updates --system
+      register: flatpak_system_pending
+      changed_when: false
+      failed_when: false
+      check_mode: no
+      when: ansible_check_mode
+      become: true
+
+    - name: List user flatpak updates (check mode only)
+      ansible.builtin.command: flatpak remote-ls --updates --user
+      register: flatpak_user_pending
+      changed_when: false
+      failed_when: false
+      check_mode: no
+      when: ansible_check_mode
+      become: false
+      environment:
+        HOME: "{{ lookup('ansible.builtin.env', 'HOME') }}"
+        PATH: "{{ lookup('ansible.builtin.env', 'PATH') }}"
+
+    - name: Display flatpak pending updates (check mode only)
+      ansible.builtin.debug:
+        msg: |
+          System scope: {{ flatpak_system_pending.stdout | default('No updates found') }}
+          User scope: {{ flatpak_user_pending.stdout | default('No updates found') }}
+      when: ansible_check_mode
+
     - name: Update system-wide flatpak packages
       ansible.builtin.command: flatpak update -y --system
       register: flatpak_system_update
@@ -24,6 +53,7 @@
         'Nothing to do' not in flatpak_system_update.stderr | default('') and
         'No remote refs found' not in flatpak_system_update.stderr | default('')
       become: true
+      when: not ansible_check_mode
 
     - name: Update user flatpak packages
       ansible.builtin.command: flatpak update -y --user
@@ -37,10 +67,12 @@
       environment:
         HOME: "{{ lookup('ansible.builtin.env', 'HOME') }}"
         PATH: "{{ lookup('ansible.builtin.env', 'PATH') }}"
+      when: not ansible_check_mode
 
     - name: Display flatpak update results
       ansible.builtin.debug:
         msg: |
           System scope: {{ flatpak_system_update.stdout | default('Nothing to do') }}
           User scope: {{ flatpak_user_update.stdout | default('Nothing to do') }}
+      when: not ansible_check_mode
   when: flatpak_check.rc == 0

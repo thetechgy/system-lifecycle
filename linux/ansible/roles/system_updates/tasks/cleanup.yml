@@ -14,6 +14,15 @@
 
 - name: Clean package cache (full clean)
   ansible.builtin.command: apt-get clean
-  when: apt_full_clean
+  when:
+    - apt_full_clean
+    - not ansible_check_mode
   changed_when: false  # Idempotent cleanup operation
   become: true
+
+- name: Skip full clean in check mode
+  ansible.builtin.debug:
+    msg: "Check mode: skipping apt-get clean; run without --check to clean package cache"
+  when:
+    - apt_full_clean
+    - ansible_check_mode

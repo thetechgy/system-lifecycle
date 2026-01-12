@@ -143,8 +143,8 @@ ansible/
 ## Notes
 
 - **WSL Detection**: Firmware updates are automatically skipped when running on WSL
-- **User Scope**: Flatpak and npm updates run as the invoking user to target per-user installs
+- **User Scope**: Flatpak updates run in both system (sudo) and user scope; npm updates run with sudo to target system-wide installs
 - **Node.js Source**: `update_nodejs=true` adds the NodeSource APT repo and installs `nodejs`
-- **Check Mode**: Use `--check` for dry-run. Note that Ansible's check mode is all-or-nothing and won't show detailed `apt upgrade --dry-run` output like the shell script
+- **Check Mode**: Use `--check` for dry-run. Command-based updates (snap/flatpak/npm/fwupdmgr/apt-get clean) are skipped while listing pending updates where available; apt upgrade still uses Ansible's check mode and won't show detailed `apt upgrade --dry-run` output like the shell script
 - **Idempotency**: All playbooks are idempotent and safe to run multiple times
 - **Privilege Escalation**: The `update-system.yml` playbook uses `become: true` (sudo)
