@@ -50,8 +50,8 @@
       changed_when: "'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))"
       failed_when: >-
         flatpak_system_update.rc != 0 and
-        'Nothing to do' not in flatpak_system_update.stderr | default('') and
-        'No remote refs found' not in flatpak_system_update.stderr | default('')
+        'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default('')) and
+        'No remote refs found' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))
       become: true
       when: not ansible_check_mode
 
@@ -61,8 +61,8 @@
       changed_when: "'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))"
       failed_when: >-
         flatpak_user_update.rc != 0 and
-        'Nothing to do' not in flatpak_user_update.stderr | default('') and
-        'No remote refs found' not in flatpak_user_update.stderr | default('')
+        'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default('')) and
+        'No remote refs found' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))
       become: false
       environment:
         HOME: "{{ lookup('ansible.builtin.env', 'HOME') }}"

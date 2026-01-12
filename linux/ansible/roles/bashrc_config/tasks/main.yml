@@ -19,7 +19,7 @@
     marker_end: "<<< system-lifecycle <<<"
     block: |
       # Aliases managed by system-lifecycle - do not edit manually
-      alias update-system='cd {{ repo_root }}/linux/ansible && ansible-playbook -i inventory/localhost.yml playbooks/update-system.yml'
+      alias update-system='cd {{ repo_root }}/linux/ansible && ansible-playbook -K -i inventory/localhost.yml playbooks/update-system.yml'
     state: "{{ bashrc_state }}"
     create: "{{ bashrc_state == 'present' }}"
     backup: true

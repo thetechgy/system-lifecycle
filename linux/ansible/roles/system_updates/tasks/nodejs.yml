@@ -1,7 +1,20 @@
 ---
 # Node.js upgrade tasks via NodeSource APT repository
 
+- name: Check if Node.js is installed (APT package)
+  ansible.builtin.command: dpkg -s nodejs
+  register: nodejs_pkg_check
+  changed_when: false
+  failed_when: false
+  check_mode: no
+
+- name: Skip Node.js upgrade when not installed
+  ansible.builtin.debug:
+    msg: "Node.js APT package is not installed, skipping upgrade"
+  when: nodejs_pkg_check.rc != 0
+
 - name: Configure Node.js APT repo and install package
+  when: nodejs_pkg_check.rc == 0
   block:
     - name: Ensure gnupg is installed for GPG key management
       ansible.builtin.apt:
