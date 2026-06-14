@@ -1,0 +1,35 @@
+---
+- name: Run APT updates
+  ansible.builtin.import_tasks: apt.yml
+  when: update_apt | bool
+  tags: [apt, update]
+
+- name: Run Snap updates
+  ansible.builtin.import_tasks: snap.yml
+  when: update_snap | bool
+  tags: [snap, update]
+
+- name: Run Flatpak updates
+  ansible.builtin.import_tasks: flatpak.yml
+  when: update_flatpak | bool
+  tags: [flatpak, update]
+
+- name: Update Node.js
+  ansible.builtin.import_tasks: nodejs.yml
+  when: update_nodejs | bool
+  tags: [nodejs, update]
+
+- name: Run npm global package updates
+  ansible.builtin.import_tasks: npm.yml
+  when: update_npm | bool
+  tags: [npm, update]
+
+- name: Run firmware updates
+  ansible.builtin.import_tasks: firmware.yml
+  when: update_firmware | bool
+  tags: [firmware, update]
+
+- name: Run APT cleanup
+  ansible.builtin.import_tasks: cleanup.yml
+  when: update_apt | bool
+  tags: [apt, update]

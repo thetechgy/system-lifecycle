@@ -21,10 +21,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Bats
+      - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bats
+          sudo apt-get install --no-install-recommends -y ansible-core bats
+
+      - name: Run Ansible syntax checks
+        run: |
+          cd linux/ansible
+          ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml
 
       - name: Run Bats tests
         run: bats tests/

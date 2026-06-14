@@ -1,0 +1,47 @@
+---
+- name: Check whether flatpak is installed
+  ansible.builtin.command: flatpak --version
+  register: flatpak_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Report missing flatpak
+  ansible.builtin.debug:
+    msg: "flatpak is not installed; skipping flatpak updates."
+  when: flatpak_check.rc != 0
+
+- name: Update system flatpaks
+  ansible.builtin.command: flatpak update -y --system
+  register: flatpak_system_update
+  changed_when: "'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))"
+  failed_when: >-
+    flatpak_system_update.rc != 0 and
+    'Nothing to do' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default('')) and
+    'No remote refs found' not in (flatpak_system_update.stdout | default('') ~ flatpak_system_update.stderr | default(''))
+  become: true
+  when:
+    - flatpak_check.rc == 0
+    - not ansible_check_mode
+
+- name: Update user flatpaks
+  ansible.builtin.command: flatpak update -y --user
+  register: flatpak_user_update
+  changed_when: "'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))"
+  failed_when: >-
+    flatpak_user_update.rc != 0 and
+    'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default('')) and
+    'No remote refs found' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - flatpak_check.rc == 0
+    - not ansible_check_mode
+
+- name: Explain skipped flatpak update
+  ansible.builtin.debug:
+    msg: "Check mode: skipping flatpak update."
+  when:
+    - flatpak_check.rc == 0
+    - ansible_check_mode

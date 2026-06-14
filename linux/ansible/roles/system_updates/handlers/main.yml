@@ -1,0 +1,4 @@
+---
+- name: reboot may be required
+  ansible.builtin.debug:
+    msg: "A reboot may be required after package updates."

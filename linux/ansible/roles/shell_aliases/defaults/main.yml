@@ -1,0 +1,3 @@
+---
+shell_aliases_state: present
+shell_aliases_file: "{{ resolved_target_home }}/.bashrc"

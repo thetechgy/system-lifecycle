@@ -1,0 +1,38 @@
+---
+- name: Install Microsoft repository dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+
+- name: Download Microsoft signing key
+  ansible.builtin.get_url:
+    url: "{{ microsoft_key_url }}"
+    dest: "{{ microsoft_key_asc }}"
+    mode: "0644"
+  register: microsoft_key_download
+  become: true
+
+- name: Check Microsoft keyring
+  ansible.builtin.stat:
+    path: "{{ microsoft_keyring }}"
+  register: microsoft_keyring_stat
+
+- name: Install Microsoft dearmored keyring
+  ansible.builtin.command: "gpg --batch --yes --dearmor -o {{ microsoft_keyring }} {{ microsoft_key_asc }}"
+  when: microsoft_key_download is changed or not microsoft_keyring_stat.stat.exists
+  become: true
+
+- name: Set Microsoft keyring permissions
+  ansible.builtin.file:
+    path: "{{ microsoft_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

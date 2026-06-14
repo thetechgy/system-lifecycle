@@ -1,0 +1,70 @@
+---
+- name: Check whether GNOME Shell is available
+  ansible.builtin.command: gnome-shell --version
+  register: gnome_shell_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Skip GNOME extensions when GNOME Shell is unavailable
+  ansible.builtin.debug:
+    msg: "GNOME Shell is unavailable; skipping extension installation."
+  when: gnome_shell_check.rc != 0
+
+- name: Install GNOME extension dependencies
+  ansible.builtin.apt:
+    name:
+      - curl
+      - jq
+      - gnome-shell-extension-dash-to-panel
+      - gnome-shell-extension-manager
+      - dconf-cli
+      - procps
+      - libglib2.0-bin
+      - libgtop2-dev
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+  when: gnome_shell_check.rc == 0
+
+- name: Enable dash-to-panel extension
+  ansible.builtin.command: gnome-extensions enable dash-to-panel@jderose9.github.com
+  changed_when: false
+  failed_when: false
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - gnome_shell_check.rc == 0
+    - not ansible_check_mode
+
+- name: Apply dash-to-panel configuration
+  ansible.builtin.shell: "dconf load /org/gnome/shell/extensions/dash-to-panel/ < {{ repo_root }}/linux/ubuntu/install/configs/dash-to-panel.dconf"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - gnome_shell_check.rc == 0
+    - not ansible_check_mode
+
+- name: Derive GNOME Shell major version
+  ansible.builtin.set_fact:
+    gnome_shell_major: "{{ gnome_shell_check.stdout | regex_search('[0-9]+') }}"
+  when: gnome_shell_check.rc == 0
+
+- name: Install extensions from extensions.gnome.org
+  ansible.builtin.include_tasks:
+    file: gnome_extension.yml
+    apply:
+      tags: [extensions, gnome]
+  loop: "{{ gnome_extensions }}"
+  loop_control:
+    loop_var: gnome_extension
+  when: gnome_shell_check.rc == 0
+  tags: [extensions, gnome]

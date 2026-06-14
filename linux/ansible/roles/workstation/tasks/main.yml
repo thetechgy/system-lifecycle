@@ -1,0 +1,33 @@
+---
+- name: Show workstation target
+  ansible.builtin.debug:
+    msg:
+      - "Target user: {{ resolved_target_user }}"
+      - "Target home: {{ resolved_target_home }}"
+      - "WSL: {{ is_wsl }}"
+  tags: always
+
+- name: Run workstation security phase
+  ansible.builtin.import_tasks: security.yml
+  when: workstation_security | bool
+  tags: [security, ubuntu_pro, usg]
+
+- name: Run workstation apps phase
+  ansible.builtin.import_tasks: apps.yml
+  when: workstation_apps | bool
+  tags: [apps]
+
+- name: Run workstation developer tools phase
+  ansible.builtin.import_tasks: devtools.yml
+  when: workstation_devtools | bool
+  tags: [devtools]
+
+- name: Run workstation GNOME extension phase
+  ansible.builtin.import_tasks: extensions.yml
+  when: workstation_extensions | bool
+  tags: [extensions, gnome]
+
+- name: Run workstation fastfetch phase
+  ansible.builtin.import_tasks: fastfetch.yml
+  when: workstation_fastfetch | bool
+  tags: [fastfetch]

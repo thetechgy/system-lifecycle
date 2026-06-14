@@ -1,0 +1,46 @@
+---
+- name: Check whether npm is available for target user
+  ansible.builtin.command: /bin/sh -c 'command -v npm >/dev/null 2>&1'
+  register: npm_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+
+- name: Report missing npm
+  ansible.builtin.debug:
+    msg: "npm is not installed for {{ resolved_target_user }}; skipping npm updates."
+  when: npm_check.rc != 0
+
+- name: Check outdated npm globals for target user
+  ansible.builtin.command: npm outdated -g --parseable
+  register: npm_outdated
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when: npm_check.rc == 0
+
+- name: Update npm globals for target user
+  ansible.builtin.command: npm update -g
+  register: npm_update_result
+  changed_when: npm_update_result.rc == 0
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - npm_check.rc == 0
+    - npm_outdated.stdout | default('') | length > 0
+    - not ansible_check_mode
+
+- name: Explain skipped npm update
+  ansible.builtin.debug:
+    msg: "Check mode: would run npm update -g as {{ resolved_target_user }}."
+  when:
+    - npm_check.rc == 0
+    - npm_outdated.stdout | default('') | length > 0
+    - ansible_check_mode

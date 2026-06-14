@@ -396,8 +396,9 @@ tail -f /var/log/system-lifecycle/*.log
 
 Test what would happen without making changes:
 ```bash
-sudo ./install-workstation.sh --dry-run
-sudo ./update-system.sh --dry-run
+cd linux/ansible
+ansible-playbook -K playbooks/install-workstation.yml --check
+ansible-playbook -K playbooks/update-system.yml --check
 ```
 
 ---
@@ -407,7 +408,7 @@ sudo ./update-system.sh --dry-run
 If you encounter issues not covered here:
 
 1. Check the log files in `/var/log/system-lifecycle/`
-2. Run with `--dry-run` to see what operations would be performed
+2. Run with `--check` to see what operations would be performed
 3. Check the [GitHub Issues](https://github.com/your-repo/system-lifecycle/issues)
 4. Create a new issue with:
    - Ubuntu version (`lsb_release -a`)

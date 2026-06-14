@@ -1,0 +1,15 @@
+---
+- name: Configure shell conveniences
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load local execution context
+      ansible.builtin.include_role:
+        name: linux_context
+      tags: always
+
+  roles:
+    - role: shell_aliases
+      tags: [shell, aliases]

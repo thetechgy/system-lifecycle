@@ -1,0 +1,28 @@
+---
+- name: Provision Linux workstation
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load local execution context
+      ansible.builtin.include_role:
+        name: linux_context
+      tags: always
+
+  roles:
+    - role: workstation
+      tags: [workstation]
+
+  post_tasks:
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+      tags: always
+
+    - name: Report reboot requirement
+      ansible.builtin.debug:
+        msg: "System reboot is required before all workstation changes take effect."
+      when: reboot_required_file.stat.exists or workstation_reboot_required | default(false)
+      tags: always

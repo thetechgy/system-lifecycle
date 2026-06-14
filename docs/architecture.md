@@ -4,13 +4,16 @@ This document describes the architecture and design decisions of the system-life
 
 ## Overview
 
-System-lifecycle is a modular automation framework for building, configuring, and maintaining Linux (Ubuntu/Debian) systems. It follows a library-based architecture where common functionality is shared across scripts.
+System-lifecycle is a modular automation framework for building, configuring, and maintaining Linux (Ubuntu/Debian) systems. Linux automation is migrating to native Ansible playbooks and roles; the Bash libraries remain for legacy scripts and shared reference behavior.
 
 ## Directory Structure
 
 ```
 system-lifecycle/
-├── linux/                          # Linux-specific scripts
+├── linux/                          # Linux automation
+│   ├── ansible/                    # Native Ansible playbooks and roles
+│   │   ├── playbooks/              # update-system, install-workstation, configure-shell
+│   │   └── roles/                  # reusable Linux automation roles
 │   ├── lib/                        # Shared bash libraries
 │   │   ├── apt.sh                  # APT package management
 │   │   ├── colors.sh               # Terminal color definitions
@@ -21,7 +24,7 @@ system-lifecycle/
 │   │   ├── repositories.sh         # APT repository management
 │   │   ├── utils.sh                # Common utilities
 │   │   └── version-check.sh        # Git version checking
-│   ├── ubuntu/                     # Ubuntu-specific scripts
+│   ├── ubuntu/                     # Legacy Ubuntu scripts and config assets
 │   │   ├── configure/              # Configuration scripts
 │   │   │   └── configure-bashrc.sh
 │   │   ├── install/                # Installation scripts
@@ -37,7 +40,19 @@ system-lifecycle/
 └── Configuration files
 ```
 
-## Library Architecture
+## Linux Ansible Architecture
+
+The Linux Ansible model uses local playbooks in `linux/ansible/playbooks` and roles in `linux/ansible/roles`.
+
+| Playbook | Purpose |
+|----------|---------|
+| `update-system.yml` | APT, Snap, Flatpak, npm, optional Node.js, optional firmware, cleanup |
+| `install-workstation.yml` | Ubuntu Pro/USG, applications, developer tools, GNOME extensions, fastfetch |
+| `configure-shell.yml` | Managed convenience aliases for common playbook scenarios |
+
+The `linux_context` role resolves `repo_root`, `target_user`, `target_home`, WSL status, and the environment used for user-scoped commands. Roles that touch npm, GNOME extensions, dconf, CLI tools, or user config must use those facts instead of running as root by default.
+
+## Legacy Bash Library Architecture
 
 ### Dependency Chain
 
@@ -138,7 +153,7 @@ main "$@"
 
 1. **Library Sourcing**: All scripts verify library existence before sourcing
 2. **Exit Codes**: Standardized exit codes defined in `utils.sh`
-3. **Dry-Run Mode**: All scripts support `--dry-run` for previewing changes
+3. **Preview Mode**: Ansible playbooks use `--check`; legacy scripts use `--dry-run`
 4. **Idempotency**: Safe to run multiple times
 5. **Logging**: Dual output to file and console
 

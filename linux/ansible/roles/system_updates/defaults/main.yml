@@ -1,0 +1,9 @@
+---
+update_apt: true
+update_snap: true
+update_flatpak: true
+update_npm: true
+update_firmware: false
+update_nodejs: false
+apt_full_clean: false
+nodejs_version: "20"
