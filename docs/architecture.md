@@ -4,40 +4,25 @@ This document describes the architecture and design decisions of the system-life
 
 ## Overview
 
-System-lifecycle is a modular automation framework for building, configuring, and maintaining Linux (Ubuntu/Debian) systems. Linux automation is migrating to native Ansible playbooks and roles; the Bash libraries remain for legacy scripts and shared reference behavior.
+Linux automation is implemented with local Ansible playbooks and roles. Bash is retained only for the `ensure-ansible.sh` bootstrap helper that installs the packages needed to run those playbooks.
 
 ## Directory Structure
 
 ```
 system-lifecycle/
-├── linux/                          # Linux automation
-│   ├── ansible/                    # Native Ansible playbooks and roles
+├── linux/
+│   ├── ansible/
 │   │   ├── playbooks/              # update-system, install-workstation, configure-shell
-│   │   └── roles/                  # reusable Linux automation roles
-│   ├── lib/                        # Shared bash libraries
-│   │   ├── apt.sh                  # APT package management
-│   │   ├── colors.sh               # Terminal color definitions
-│   │   ├── dependencies.sh         # Dependency checking utilities
-│   │   ├── gnome-extensions.sh     # GNOME extension management
-│   │   ├── logging.sh              # Logging system
-│   │   ├── progress.sh             # Progress indicators
-│   │   ├── repositories.sh         # APT repository management
-│   │   ├── utils.sh                # Common utilities
-│   │   └── version-check.sh        # Git version checking
-│   ├── ubuntu/                     # Legacy Ubuntu scripts and config assets
-│   │   ├── configure/              # Configuration scripts
-│   │   │   └── configure-bashrc.sh
-│   │   ├── install/                # Installation scripts
-│   │   │   ├── install-workstation.sh
-│   │   │   └── configs/            # Configuration files
-│   │   └── update/                 # Update scripts
-│   │       └── update-system.sh
-│   ├── debian/                     # Debian-specific (placeholder)
-│   └── common/                     # Cross-distribution (placeholder)
+│   │   ├── roles/                  # reusable Linux automation roles
+│   │   ├── inventory/              # local inventory
+│   │   └── scripts/                # bootstrap helpers
+│   ├── lib/                        # colors/logging/utils for ensure-ansible.sh
+│   ├── ubuntu/install/configs/     # dconf and fastfetch assets consumed by Ansible
+│   ├── debian/                     # placeholder
+│   └── common/                     # placeholder
 ├── windows/                        # Windows PowerShell scripts
 ├── tests/                          # Bats test suite
-├── docs/                           # Documentation
-└── Configuration files
+└── docs/                           # Documentation
 ```
 
 ## Linux Ansible Architecture
@@ -52,278 +37,70 @@ The Linux Ansible model uses local playbooks in `linux/ansible/playbooks` and ro
 
 The `linux_context` role resolves `repo_root`, `target_user`, `target_home`, WSL status, and the environment used for user-scoped commands. Roles that touch npm, GNOME extensions, dconf, CLI tools, or user config must use those facts instead of running as root by default.
 
-## Legacy Bash Library Architecture
+## Bootstrap Script
 
-### Dependency Chain
+`linux/ansible/scripts/ensure-ansible.sh` is the only supported Linux shell entrypoint. It ensures `ansible-core`, `python3-apt`, and `python3-yaml` are installed before playbooks run. The managed shell aliases call it before invoking `ansible-playbook`.
 
-Libraries must be sourced in a specific order due to dependencies:
-
-```
-colors.sh          (no dependencies)
-     ↓
-logging.sh         (depends on: colors.sh)
-     ↓
-utils.sh           (depends on: logging.sh)
-     ↓
-dependencies.sh    (depends on: logging.sh, utils.sh)
-apt.sh             (depends on: logging.sh, utils.sh)
-repositories.sh    (depends on: logging.sh, utils.sh)
-gnome-extensions.sh (depends on: logging.sh, utils.sh)
-progress.sh        (depends on: colors.sh)
-version-check.sh   (no dependencies)
-```
-
-### Library Descriptions
+The retained Bash libraries are intentionally small:
 
 | Library | Purpose |
 |---------|---------|
-| `colors.sh` | Terminal color definitions (RED, GREEN, etc.) with TTY detection |
-| `logging.sh` | Structured logging to file and console with timestamps |
-| `utils.sh` | Common utilities: `command_exists`, `check_root`, exit codes |
-| `dependencies.sh` | Command requirement checking: `require_commands` |
-| `apt.sh` | APT operations: update, upgrade, install, clean |
-| `repositories.sh` | Repository management: GPG keys, DEB822 format |
-| `gnome-extensions.sh` | GNOME extension installation from extensions.gnome.org |
-| `progress.sh` | Progress bars and phase tracking |
-| `version-check.sh` | Git repository version checking |
+| `colors.sh` | Terminal color definitions |
+| `logging.sh` | Structured logging helpers |
+| `utils.sh` | Common command and exit-code helpers |
 
-## Script Architecture
+## Design Patterns
 
-### Standard Script Structure
-
-All main scripts follow this structure:
-
-```bash
-#!/usr/bin/env bash
-#
-# script-name.sh - Description
-#
-# Usage, Options, Exit Codes documentation
-
-set -o errexit   # Exit on error
-set -o nounset   # Exit on undefined variable
-set -o pipefail  # Catch pipeline failures
-
-# Configuration
-SCRIPT_NAME="$(basename "${0}")"
-SCRIPT_DIR="$(cd "$(dirname "${0}")" && pwd)"
-LIB_DIR="${SCRIPT_DIR}/../../lib"
-
-# Default flags
-DRY_RUN=false
-QUIET=false
-
-# Library existence check
-_check_lib() { ... }
-
-# Source libraries
-source "${LIB_DIR}/colors.sh"
-source "${LIB_DIR}/logging.sh"
-source "${LIB_DIR}/utils.sh"
-
-# Help and version functions
-show_usage() { ... }
-show_version() { ... }
-
-# Argument parsing
-parse_args() { ... }
-
-# Cleanup handler
-cleanup() { ... }
-trap cleanup EXIT
-
-# Feature functions
-feature_one() { ... }
-feature_two() { ... }
-
-# Main function
-main() {
-  parse_args "$@"
-  check_root
-  init_logging
-
-  feature_one
-  feature_two
-}
-
-main "$@"
-```
-
-### Key Design Patterns
-
-1. **Library Sourcing**: All scripts verify library existence before sourcing
-2. **Exit Codes**: Standardized exit codes defined in `utils.sh`
-3. **Preview Mode**: Ansible playbooks use `--check`; legacy scripts use `--dry-run`
-4. **Idempotency**: Safe to run multiple times
-5. **Logging**: Dual output to file and console
-
-## Logging System
-
-### Log Levels
-
-- `log_info` - Informational messages (blue)
-- `log_success` - Success messages (green)
-- `log_warning` - Warning messages (yellow)
-- `log_error` - Error messages (red)
-
-### Log Files
-
-Logs are stored in `/var/log/system-lifecycle/` with naming pattern:
-```
-<script-name>-YYYYMMDD-HHMMSS.log
-```
-
-### Quiet Mode
-
-When `QUIET=true`:
-- Console output is suppressed
-- File logging continues normally
-
-## Error Handling
-
-### Exit Codes
-
-| Code | Constant | Meaning |
-|------|----------|---------|
-| 0 | EXIT_SUCCESS | Success |
-| 1 | EXIT_ERROR | General error |
-| 2 | EXIT_INVALID_ARGS | Invalid arguments |
-| 3 | EXIT_NOT_ROOT | Not running as root |
-| 4 | EXIT_APT_UPDATE_FAILED | APT update failed |
-| 5 | EXIT_APT_UPGRADE_FAILED | APT upgrade failed |
-| 6 | EXIT_NPM_UPDATE_FAILED | NPM update failed |
-| 7 | EXIT_USG_FAILED | USG/CIS hardening failed |
-| 8 | EXIT_APP_INSTALL_FAILED | Application installation failed |
-| 9 | EXIT_EXTENSION_FAILED | Extension installation failed |
-| 10 | EXIT_PREREQ_FAILED | Prerequisites check failed |
-| 11 | EXIT_DEVTOOLS_FAILED | Developer tools installation failed |
-| 12 | EXIT_UBUNTU_PRO_FAILED | Ubuntu Pro enrollment failed |
-
-### Cleanup Handlers
-
-All scripts use `trap cleanup EXIT` to:
-- Log completion status
-- Display log file location
-- Perform any necessary cleanup
+1. **Ansible-first Linux automation**: New Linux behavior belongs in roles and playbooks, not standalone shell scripts.
+2. **Check mode for previews**: Use `ansible-playbook --check` instead of custom `--dry-run` behavior.
+3. **Target-user execution**: User-scoped package, GNOME, dconf, and config tasks use `linux_context` facts.
+4. **Idempotent tasks**: Prefer Ansible modules and explicit `changed_when`/`failed_when` where command tasks are unavoidable.
+5. **Bootstrap isolation**: Shell helpers exist only to support `ensure-ansible.sh`.
 
 ## Security Considerations
 
-### Running as Root
-
-Most scripts require root privileges for:
-- Package installation (apt-get)
-- System configuration changes
-- Log file creation in /var/log
-
-### Secure Temporary Files
-
-- Use `mktemp` instead of hardcoded `/tmp/` paths
-- Clean up temp files on exit
-- Avoid race conditions
-
-### Token Handling
-
-- Ubuntu Pro tokens read with `-s` flag (silent)
-- Tokens not logged to files
-- Tokens passed via command line or environment
-
-### Command Execution
-
-- Commands built as arrays to prevent word splitting
-- User input properly quoted
-- Avoid `eval` and command injection vectors
+- System-level package and configuration tasks run with `become: true`.
+- User-scoped commands run as the resolved target user with explicit `HOME`, `PATH`, `XDG_RUNTIME_DIR`, and DBus environment.
+- Ubuntu Pro tokens should be treated as secrets and passed using safe Ansible mechanisms where possible.
+- Firmware and USG/CIS hardening are skipped on WSL where they do not apply.
 
 ## Extension Points
 
-### Adding New Scripts
+### Adding Linux Automation
 
-1. Create script in appropriate directory (ubuntu/install/, etc.)
-2. Source required libraries
-3. Follow standard script structure
-4. Add tests in tests/ directory
-5. Update documentation
-
-### Adding New Libraries
-
-1. Create library in linux/lib/
-2. Document dependencies in header
-3. Follow existing function patterns
-4. Add library to _check_lib calls in scripts that need it
+1. Add or update a role under `linux/ansible/roles`.
+2. Wire the role or task into the appropriate playbook.
+3. Add tags and defaults for user-facing toggles.
+4. Update `README.md` and `linux/ansible/README.md` when commands, variables, or behavior change.
+5. Add Bats coverage under `tests/ansible/`.
 
 ### Distribution Support
 
-The architecture supports multiple distributions:
-- `linux/ubuntu/` - Ubuntu-specific
-- `linux/debian/` - Debian-specific (planned)
-- `linux/common/` - Distribution-agnostic (planned)
+The current playbooks target Ubuntu 24.04 LTS and compatible Debian-based systems. Placeholder directories remain for future Debian or cross-distribution assets.
 
 ## Testing
 
-### Test Framework
-
-Uses [Bats](https://github.com/bats-core/bats-core) (Bash Automated Testing System).
-
-### Test Structure
+Tests use [Bats](https://github.com/bats-core/bats-core).
 
 ```
 tests/
-├── lib/                    # Library function tests
-│   ├── colors.bats
-│   ├── utils.bats
-│   └── version-check.bats
-├── ubuntu/                 # Script tests
-│   └── update-system.bats
-└── test_helper.bash        # Common test utilities
+├── ansible/                 # Ansible migration surface tests
+├── lib/                     # Bootstrap helper library tests
+└── test_helper.bash         # Common test helpers
 ```
 
-### Running Tests
+Run checks before submitting:
 
 ```bash
-# Run all tests
-bats tests/
+find linux -name '*.sh' -exec shellcheck -x {} +
 
-# Run specific test file
-bats tests/lib/utils.bats
+cd linux/ansible
+ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml
+cd ../..
+
+bats tests/
 ```
 
 ## CI/CD
 
-### GitHub Actions
-
-- ShellCheck linting on all shell scripts
-- Bats tests on pull requests
-- Pre-commit hooks for local development
-
-### Pre-commit Hooks
-
-Configured in `.pre-commit-config.yaml`:
-- ShellCheck
-- Trailing whitespace
-- End of file fixer
-- Gitleaks (secret detection)
-
-## Future Considerations
-
-### Implemented Features
-
-The following features have been implemented:
-
-1. **Rollback Mechanism** (`linux/lib/rollback.sh`): Create restore points, backup files/directories, restore from snapshots
-2. **Retry Logic** (`linux/lib/retry.sh`): Automatic retry with exponential backoff, jitter, and configurable conditions
-3. **Config File Support** (`linux/lib/config.sh`): External configuration files with validation and secret masking
-
-### Planned Features
-
-1. **Uninstall Script**: Reverse workstation installation
-2. **Debian Support**: Distribution-specific scripts for Debian (placeholder exists)
-3. **Common Scripts**: Distribution-agnostic utilities (placeholder exists)
-
-### Architectural Decisions
-
-| Decision | Rationale |
-|----------|-----------|
-| Bash over Python | Target systems always have bash; no dependency installation |
-| Library-based | Reduces duplication, ensures consistency |
-| DEB822 format | Modern APT repository format, better tooling support |
-| GNOME API | Direct extension installation without browser |
-| Log files | Audit trail and debugging support |
+GitHub Actions runs ShellCheck, Ansible syntax checks, and Bats tests on pushes to `develop` and pull requests to `main`.

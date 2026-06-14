@@ -6,6 +6,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 - Ubuntu 24.04 LTS (or compatible Debian-based distribution)
 - Git
+- Ansible Core (`sudo apt-get install ansible-core`)
 - ShellCheck (`sudo apt-get install shellcheck`)
 - Bats (`sudo apt-get install bats`)
 - Pre-commit (`pip install pre-commit`)
@@ -32,11 +33,11 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 ## Coding Standards
 
-See [AGENTS.md](AGENTS.md) for detailed bash scripting standards. Key requirements:
+See [AGENTS.md](AGENTS.md) for detailed project standards. Key requirements:
 
-- Use strict mode (`set -euo pipefail`)
-- Source shared libraries from `linux/lib/`
-- Support `--help` and `--dry-run` flags
+- Linux automation belongs in `linux/ansible` playbooks and roles
+- Keep `linux/ansible/scripts/ensure-ansible.sh` as the only Linux shell entrypoint
+- Use `ansible-playbook --check` for preview behavior
 - Pass ShellCheck with no warnings
 - Include tests for new functionality
 
@@ -79,7 +80,10 @@ ci: Add Bats testing workflow
 
 1. Ensure all tests pass:
    ```bash
-   shellcheck linux/**/*.sh
+   find linux -name '*.sh' -exec shellcheck -x {} +
+   cd linux/ansible
+   ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml
+   cd ../..
    bats tests/
    ```
 
@@ -101,7 +105,12 @@ Run tests before submitting:
 
 ```bash
 # Lint all scripts
-shellcheck linux/**/*.sh
+find linux -name '*.sh' -exec shellcheck -x {} +
+
+# Run Ansible syntax checks
+cd linux/ansible
+ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml
+cd ../..
 
 # Run all tests
 bats tests/

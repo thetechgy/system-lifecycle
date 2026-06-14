@@ -3,7 +3,7 @@
 [![ShellCheck](https://github.com/thetechgy/system-lifecycle/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/thetechgy/system-lifecycle/actions/workflows/shellcheck.yml)
 [![Bats Tests](https://github.com/thetechgy/system-lifecycle/actions/workflows/test.yml/badge.svg)](https://github.com/thetechgy/system-lifecycle/actions/workflows/test.yml)
 
-Personal automation for building, configuring, and maintaining Linux and Windows systems across their lifecycle. Linux automation is moving to native Ansible playbooks; Windows automation remains PowerShell-based.
+Personal automation for building, configuring, and maintaining Linux and Windows systems across their lifecycle. Linux automation is implemented with native Ansible playbooks; Windows automation remains PowerShell-based.
 
 > **Note**: These scripts are created for my own use and reflect my personal preferences. You're welcome to use them or fork and adapt them to your needs, but **please review the code thoroughly before running** to understand what it will do to your system. I accept no liability for any damage or issues that may result from using these scripts.
 
@@ -13,8 +13,8 @@ Personal automation for building, configuring, and maintaining Linux and Windows
 system-lifecycle/
 ├── linux/                  # Linux automation
 │   ├── ansible/            # Native Ansible playbooks and roles
-│   ├── lib/                # Legacy shared bash utilities
-│   ├── ubuntu/             # Legacy Ubuntu scripts and config assets
+│   ├── lib/                # Bootstrap Bash helpers used by ensure-ansible.sh
+│   ├── ubuntu/             # Ansible-consumed Ubuntu config assets
 │   ├── debian/             # Debian-specific scripts
 │   └── common/             # Cross-distro scripts
 ├── windows/                # Windows scripts (PowerShell)
@@ -105,62 +105,11 @@ ansible-playbook -K playbooks/install-workstation.yml -e cis_profile=cis_level2_
 
 See `linux/ansible/README.md` for the complete Linux Ansible command reference.
 
-## Shared Libraries
+## Bootstrap Helper
 
-The `linux/lib/` directory contains reusable Bash utilities retained for legacy scripts and reference during the Ansible migration:
+The only supported Linux shell entrypoint is `linux/ansible/scripts/ensure-ansible.sh`. It installs the runtime packages needed to run the Ansible playbooks and is called automatically by the managed aliases.
 
-| Library | Purpose |
-|---------|---------|
-| `colors.sh` | Terminal color definitions |
-| `logging.sh` | Structured logging to file and console |
-| `utils.sh` | Common utilities and exit codes |
-| `apt.sh` | APT package management helpers |
-| `retry.sh` | Retry logic with exponential backoff |
-| `rollback.sh` | Backup and restore functionality |
-| `repositories.sh` | APT repository management |
-| `gnome-extensions.sh` | GNOME extension installation |
-| `config.sh` | Configuration file parsing |
-| `progress.sh` | Progress bar display |
-
-### Rollback Capability
-
-The rollback library provides disaster recovery functionality:
-
-```bash
-# In your scripts, source the library
-source "${LIB_DIR}/rollback.sh"
-
-# Create a restore point before making changes
-rollback_create_restore_point "pre-upgrade"
-
-# Backup individual files
-rollback_backup_file "/etc/ssh/sshd_config"
-
-# List available restore points
-rollback_list_restore_points
-
-# Restore from a point (use with caution)
-rollback_restore "pre-upgrade"
-```
-
-Restore points are stored in `/var/backups/system-lifecycle/`.
-
-### Retry with Exponential Backoff
-
-The retry library handles transient failures:
-
-```bash
-source "${LIB_DIR}/retry.sh"
-
-# Retry a command up to 3 times with exponential backoff
-retry_with_backoff 3 apt-get update
-
-# Simple retry with fixed delay (5 attempts, 2 second delay)
-retry_command 5 2 curl -fsSL https://example.com
-
-# Wait for a service to become available
-wait_for_service "snapd" 60 5  # service name, max wait, interval
-```
+`linux/lib/` is intentionally minimal and exists only for that bootstrap script: `colors.sh`, `logging.sh`, and `utils.sh`.
 
 ## Requirements
 
@@ -207,10 +156,10 @@ pre-commit run --all-files
 
 ### Linting
 
-Shell scripts are linted with ShellCheck:
+The retained bootstrap shell script and helper libraries are linted with ShellCheck:
 
 ```bash
-shellcheck linux/**/*.sh
+find linux -name '*.sh' -exec shellcheck -x {} +
 ```
 
 ### Testing

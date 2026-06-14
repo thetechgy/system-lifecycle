@@ -6,6 +6,6 @@
 load './test_helper'
 
 @test "run all subdirectory test suites" {
-  run bats "${REPO_ROOT}/tests/lib" "${REPO_ROOT}/tests/ubuntu" "${REPO_ROOT}/tests/ansible"
+  run bats "${REPO_ROOT}/tests/lib" "${REPO_ROOT}/tests/ansible"
   [ "$status" -eq 0 ]
 }

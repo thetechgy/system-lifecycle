@@ -28,7 +28,7 @@ assignees: ''
 
 - **OS:** <!-- e.g., Ubuntu 24.04 LTS -->
 - **Shell:** <!-- e.g., bash 5.2.21 -->
-- **Script:** <!-- e.g., update-system.sh -->
+- **Playbook or command:** <!-- e.g., playbooks/update-system.yml or linux-update -->
 - **Version/Commit:** <!-- e.g., main branch, commit abc123 -->
 
 ## Logs/Output
