@@ -1,0 +1,40 @@
+---
+- name: Check whether snap is installed
+  ansible.builtin.command: snap --version
+  register: snap_check
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Report missing snap
+  ansible.builtin.debug:
+    msg: "snap is not installed; skipping snap updates."
+  when: snap_check.rc != 0
+
+- name: List pending snap updates
+  ansible.builtin.command: snap refresh --list
+  register: snap_pending
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when: snap_check.rc == 0
+
+- name: Refresh snap packages
+  ansible.builtin.command: snap refresh
+  register: snap_refresh
+  changed_when: "'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))"
+  failed_when: >-
+    snap_refresh.rc != 0 and
+    'All snaps up to date' not in (snap_refresh.stdout | default('') ~ snap_refresh.stderr | default(''))
+  become: true
+  when:
+    - snap_check.rc == 0
+    - not ansible_check_mode
+
+- name: Explain skipped snap refresh
+  ansible.builtin.debug:
+    msg: "Check mode: skipping snap refresh."
+  when:
+    - snap_check.rc == 0
+    - ansible_check_mode

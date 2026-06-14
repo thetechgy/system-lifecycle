@@ -66,6 +66,21 @@ NODEJS_VERSION="20"
 # Source Libraries
 # -----------------------------------------------------------------------------
 
+# Helper to check library exists before sourcing
+_check_lib() {
+  local lib="${1}"
+  if [[ ! -f "${lib}" ]]; then
+    echo "ERROR: Required library not found: ${lib}" >&2
+    echo "Ensure the script is run from within the system-lifecycle repository." >&2
+    exit 1
+  fi
+}
+
+_check_lib "${LIB_DIR}/colors.sh"
+_check_lib "${LIB_DIR}/logging.sh"
+_check_lib "${LIB_DIR}/utils.sh"
+_check_lib "${LIB_DIR}/version-check.sh"
+
 # shellcheck source=../../lib/colors.sh
 source "${LIB_DIR}/colors.sh"
 
@@ -351,8 +366,13 @@ nodejs_upgrade() {
   local target_major="${NODEJS_VERSION}"
   log_info "Target Node.js version: ${target_major}.x (via Snap)"
 
-  # Skip if already at or above target version and using snap
+  local snap_installed=false
   if snap list node &>/dev/null; then
+    snap_installed=true
+  fi
+
+  # Skip if already at or above target version and using snap
+  if [[ "${snap_installed}" == true ]]; then
     if [[ -n "${current_major}" ]] && [[ "${current_major}" -ge "${target_major}" ]]; then
       log_success "Node.js is already at v${current_version} (>= ${target_major}.x)"
       return 0
@@ -360,20 +380,37 @@ nodejs_upgrade() {
   fi
 
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: snap install node --classic --channel=${target_major}"
+    if [[ "${snap_installed}" == true ]]; then
+      log_info "[DRY-RUN] Would run: snap refresh node --channel=${target_major}"
+    else
+      log_info "[DRY-RUN] Would run: snap install node --classic --channel=${target_major}"
+    fi
     return 0
   fi
 
   # Install/upgrade Node.js via Snap
-  log_info "Installing Node.js ${target_major}.x via Snap..."
-  if snap install node --classic --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
-    local new_version
-    new_version=$(/snap/bin/node --version 2>/dev/null)
-    log_success "Node.js upgraded to ${new_version} (via Snap)"
-    log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+  if [[ "${snap_installed}" == true ]]; then
+    log_info "Refreshing Node.js ${target_major}.x via Snap..."
+    if snap refresh node --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
+      local new_version
+      new_version=$(/snap/bin/node --version 2>/dev/null || node --version 2>/dev/null || echo "unknown")
+      log_success "Node.js upgraded to ${new_version} (via Snap)"
+      log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+    else
+      log_error "Failed to refresh Node.js via Snap"
+      return 1
+    fi
   else
-    log_error "Failed to install Node.js via Snap"
-    return 1
+    log_info "Installing Node.js ${target_major}.x via Snap..."
+    if snap install node --classic --channel="${target_major}" 2>&1 | tee -a "${LOG_FILE}"; then
+      local new_version
+      new_version=$(/snap/bin/node --version 2>/dev/null || node --version 2>/dev/null || echo "unknown")
+      log_success "Node.js upgraded to ${new_version} (via Snap)"
+      log_info "Note: npm global packages are at ~/snap/node/current/bin/"
+    else
+      log_error "Failed to install Node.js via Snap"
+      return 1
+    fi
   fi
 }
 
@@ -389,16 +426,49 @@ npm_update() {
 
   section "Updating NPM Global Packages"
 
-  if ! command_exists npm; then
-    log_info "npm is not installed, skipping npm updates"
+  local npm_user="root"
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    npm_user="${SUDO_USER}"
+  fi
+
+  local npm_home="${HOME}"
+  if [[ "${npm_user}" != "root" ]]; then
+    npm_home=$(getent passwd "${npm_user}" 2>/dev/null | cut -d: -f6 || true)
+    if [[ -z "${npm_home}" ]]; then
+      npm_home="${HOME}"
+    fi
+  fi
+
+  local npm_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:${npm_home}/.local/bin:${npm_home}/snap/node/current/bin"
+  local npm_runner=()
+
+  if [[ "${npm_user}" == "root" ]]; then
+    npm_runner=(env HOME="${npm_home}" PATH="${npm_path}")
+  else
+    if command_exists sudo; then
+      npm_runner=(sudo -u "${npm_user}" -H env HOME="${npm_home}" PATH="${npm_path}")
+    elif command_exists runuser; then
+      npm_runner=(runuser -u "${npm_user}" -- env HOME="${npm_home}" PATH="${npm_path}")
+    else
+      log_warning "Cannot switch to user ${npm_user}; skipping npm updates"
+      return 0
+    fi
+  fi
+
+  if ! "${npm_runner[@]}" /bin/sh -c 'command -v npm >/dev/null 2>&1'; then
+    log_info "npm is not installed for ${npm_user}, skipping npm updates"
     return 0
+  fi
+
+  if [[ "${npm_user}" != "root" ]]; then
+    log_info "Running npm updates as user: ${npm_user}"
   fi
 
   log_info "Checking for outdated npm global packages..."
 
   # Get list of outdated packages
   local outdated_packages
-  outdated_packages=$(npm outdated -g --parseable 2>/dev/null || true)
+  outdated_packages=$("${npm_runner[@]}" npm outdated -g --parseable 2>/dev/null || true)
 
   if [[ -z "${outdated_packages}" ]]; then
     log_success "All npm global packages are up to date"
@@ -409,12 +479,16 @@ npm_update() {
   echo "${outdated_packages}" | tee -a "${LOG_FILE}"
 
   if [[ "${DRY_RUN}" == true ]]; then
-    log_info "[DRY-RUN] Would run: npm update -g"
+    if [[ "${npm_user}" != "root" ]]; then
+      log_info "[DRY-RUN] Would run: npm update -g (as ${npm_user})"
+    else
+      log_info "[DRY-RUN] Would run: npm update -g"
+    fi
     return 0
   fi
 
   log_info "Updating npm global packages..."
-  if npm update -g 2>&1 | tee -a "${LOG_FILE}"; then
+  if "${npm_runner[@]}" npm update -g 2>&1 | tee -a "${LOG_FILE}"; then
     log_success "npm global packages updated successfully"
   else
     log_warning "Some npm packages could not be updated"

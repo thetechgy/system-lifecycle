@@ -1,0 +1,127 @@
+---
+- name: Skip security hardening on WSL
+  ansible.builtin.debug:
+    msg: "WSL detected; skipping Ubuntu Pro and USG/CIS hardening."
+  when: is_wsl
+
+- name: Ensure Ubuntu Pro client is installed
+  ansible.builtin.apt:
+    name: ubuntu-advantage-tools
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+
+- name: Check Ubuntu Pro attachment
+  ansible.builtin.command: pro status --format json
+  register: pro_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+
+- name: Determine Ubuntu Pro readiness
+  ansible.builtin.set_fact:
+    ubuntu_pro_ready: >-
+      {{
+        ubuntu_pro_token | length > 0 or
+        '"attached": true' in (pro_status.stdout | default('')) or
+        'This machine is attached' in (pro_status.stdout | default(''))
+      }}
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+
+- name: Skip USG when Ubuntu Pro is unavailable
+  ansible.builtin.debug:
+    msg: "Ubuntu Pro is not attached and no ubuntu_pro_token was provided; skipping USG/CIS hardening."
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+    - not ubuntu_pro_ready | default(false)
+
+- name: Attach Ubuntu Pro with provided token
+  ansible.builtin.command: "pro attach {{ ubuntu_pro_token }}"
+  register: pro_attach
+  changed_when: pro_attach.rc == 0
+  no_log: true
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+    - ubuntu_pro_token | length > 0
+    - "'This machine is attached' not in (pro_status.stdout | default(''))"
+    - not ansible_check_mode
+
+- name: Enable USG service
+  ansible.builtin.command: pro enable usg -y
+  register: pro_enable_usg
+  changed_when: pro_enable_usg.rc == 0
+  failed_when: >-
+    pro_enable_usg.rc != 0 and
+    'already enabled' not in (pro_enable_usg.stdout | default('') ~ pro_enable_usg.stderr | default(''))
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_enabled | bool
+    - ubuntu_pro_ready | default(false)
+    - not ansible_check_mode
+
+- name: Install Ubuntu Security Guide
+  ansible.builtin.apt:
+    name: ubuntu-security-guide
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_ready | default(false)
+
+- name: Run CIS audit
+  ansible.builtin.command: "usg audit {{ cis_profile }}"
+  register: usg_audit
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_ready | default(false)
+    - usg_run_audit | bool
+    - not ansible_check_mode
+
+- name: Create pre-hardening /etc backup
+  ansible.builtin.command: "tar czf /var/backups/system-lifecycle-etc-{{ ansible_date_time.iso8601_basic_short }}.tar.gz /etc"
+  args:
+    creates: "/var/backups/system-lifecycle-etc-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_ready | default(false)
+    - not ansible_check_mode
+
+- name: Apply CIS hardening
+  ansible.builtin.command: "usg fix {{ cis_profile }}"
+  register: usg_fix
+  changed_when: usg_fix.rc == 0
+  become: true
+  when:
+    - not is_wsl
+    - ubuntu_pro_ready | default(false)
+    - not ansible_check_mode
+
+- name: Mark workstation reboot after hardening
+  ansible.builtin.set_fact:
+    workstation_reboot_required: true
+  when:
+    - not is_wsl
+    - usg_fix is defined
+    - usg_fix is changed

@@ -1,0 +1,46 @@
+---
+- name: Report skipped firmware updates on WSL
+  ansible.builtin.debug:
+    msg: "WSL detected; skipping firmware updates."
+  when: is_wsl
+
+- name: Ensure fwupd is installed
+  ansible.builtin.apt:
+    name: fwupd
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+  when: not is_wsl
+
+- name: Refresh firmware metadata
+  ansible.builtin.command: fwupdmgr refresh --force
+  changed_when: false
+  failed_when: false
+  become: true
+  when:
+    - not is_wsl
+    - not ansible_check_mode
+
+- name: Check available firmware updates
+  ansible.builtin.command: fwupdmgr get-updates
+  register: fwupd_available
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  when: not is_wsl
+
+- name: Apply firmware updates
+  ansible.builtin.command: fwupdmgr update -y
+  register: fwupd_update
+  changed_when: "'Successfully installed' in fwupd_update.stdout"
+  failed_when: >-
+    fwupd_update.rc != 0 and
+    'No updatable devices' not in (fwupd_update.stderr | default('')) and
+    'No updates available' not in (fwupd_update.stderr | default('')) and
+    'Nothing to do' not in (fwupd_update.stdout | default(''))
+  become: true
+  when:
+    - not is_wsl
+    - not ansible_check_mode

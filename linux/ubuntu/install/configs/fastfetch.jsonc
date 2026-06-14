@@ -1,0 +1,66 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/master/doc/json_schema.json",
+  "logo": { "type": "none" },
+  "display": {
+    "disableLinewrap": true,
+    "brightColor": true,
+    "separator": "  ",
+    "color": { "keys": "1;37", "separator": "1;37", "output": "0;37" },
+    "duration": { "abbreviation": true },
+    "size": { "binaryPrefix": "iec", "ndigits": 1 },
+    "temp": { "unit": "D", "ndigits": 1 },
+    "percent": { "type": ["num"], "ndigits": 0 },
+    "key": { "width": 9 }
+  },
+  "general": { "thread": true, "processingTimeout": 5000, "detectVersion": true },
+  "modules": [
+    { "type": "title", "key": " ", "fqdn": false },
+    { "type": "separator", "string": "-" },
+
+    { "type": "os",     "key": "OS" },
+    { "type": "host",   "key": "Host" },
+    { "type": "kernel", "key": "Kernel" },
+    { "type": "uptime", "key": "Uptime" },
+
+    { "type": "custom", "output": "\n" },
+
+    { "type": "cpu",    "key": "CPU", "showPeCoreCount": true },
+    { "type": "gpu",    "key": "GPU", "detectionMethod": "pci" },
+    { "type": "memory", "key": "Memory" },
+    {
+      "type": "disk",
+      "key": "Disk",
+      "showRegular": true,
+      "showExternal": false,
+      "showHidden": false,
+      "hideFolders": "/efi:/boot:/boot/efi:/boot/firmware",
+      "useAvailable": true
+    },
+
+    { "type": "custom", "output": "\n" },
+
+    {
+      "type": "localip",
+      "key": "Local IP",
+      "showIpv4": true,
+      "showIpv6": false,
+      "showPrefixLen": false,
+      "defaultRouteOnly": true,
+      "compact": true
+    },
+
+    { "type": "custom", "output": "\n" },
+
+    {
+      "type": "battery",
+      "key": "Battery",
+      "batteries": ["BAT1"],
+      "showNames": false,
+      "showStatus": true,
+      "temp": false
+    },
+    { "type": "poweradapter", "key": "Power" },
+
+    { "type": "custom", "output": "\n\n\n" }
+  ]
+}

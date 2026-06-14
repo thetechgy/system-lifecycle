@@ -1,0 +1,26 @@
+---
+- name: Remove unused packages
+  ansible.builtin.apt:
+    autoremove: true
+  become: true
+
+- name: Autoclean package cache
+  ansible.builtin.apt:
+    autoclean: true
+  when: not apt_full_clean | bool
+  become: true
+
+- name: Fully clean package cache
+  ansible.builtin.command: apt-get clean
+  changed_when: false
+  when:
+    - apt_full_clean | bool
+    - not ansible_check_mode
+  become: true
+
+- name: Explain skipped full cache clean
+  ansible.builtin.debug:
+    msg: "Check mode: skipping apt-get clean."
+  when:
+    - apt_full_clean | bool
+    - ansible_check_mode

@@ -18,20 +18,45 @@ QUIET="${QUIET:-false}"
 # Initialize logging - creates log directory and sets log file path
 # Arguments:
 #   $1 - Script name prefix for log file (e.g., "update-system")
+# Returns:
+#   0 on success, 1 if logging cannot be initialized
 init_logging() {
   local script_name="${1:-script}"
   local timestamp
   timestamp="$(date +%Y%m%d-%H%M%S)"
 
+  # Try to create log directory if it doesn't exist
   if [[ ! -d "${LOG_DIR}" ]]; then
-    mkdir -p "${LOG_DIR}"
+    if ! mkdir -p "${LOG_DIR}" 2>/dev/null; then
+      echo "WARNING: Cannot create log directory: ${LOG_DIR}" >&2
+      echo "WARNING: Logging to file will be disabled" >&2
+      LOG_FILE=""
+      return 1
+    fi
+  fi
+
+  # Check if log directory is writable
+  if [[ ! -w "${LOG_DIR}" ]]; then
+    echo "WARNING: Log directory is not writable: ${LOG_DIR}" >&2
+    echo "WARNING: Logging to file will be disabled" >&2
+    LOG_FILE=""
+    return 1
   fi
 
   LOG_FILE="${LOG_DIR}/${script_name}-${timestamp}.log"
-  touch "${LOG_FILE}"
-  chmod 640 "${LOG_FILE}"
+
+  # Try to create and set permissions on log file
+  if ! touch "${LOG_FILE}" 2>/dev/null; then
+    echo "WARNING: Cannot create log file: ${LOG_FILE}" >&2
+    echo "WARNING: Logging to file will be disabled" >&2
+    LOG_FILE=""
+    return 1
+  fi
+
+  chmod 640 "${LOG_FILE}" 2>/dev/null || true
 
   log_info "Log file: ${LOG_FILE}"
+  return 0
 }
 
 # Core logging function
@@ -52,10 +77,10 @@ log() {
   # Log to console (unless quiet mode)
   if [[ "${QUIET}" != true ]]; then
     case "${level}" in
-      INFO)    printf "${BLUE:-}[%s]${NC:-} %s\n" "${level}" "${message}" ;;
-      SUCCESS) printf "${GREEN:-}[%s]${NC:-} %s\n" "${level}" "${message}" ;;
-      WARNING) printf "${YELLOW:-}[%s]${NC:-} %s\n" "${level}" "${message}" >&2 ;;
-      ERROR)   printf "${RED:-}[%s]${NC:-} %s\n" "${level}" "${message}" >&2 ;;
+      INFO)    printf '%b[%s]%b %s\n' "${BLUE:-}" "${level}" "${NC:-}" "${message}" ;;
+      SUCCESS) printf '%b[%s]%b %s\n' "${GREEN:-}" "${level}" "${NC:-}" "${message}" ;;
+      WARNING) printf '%b[%s]%b %s\n' "${YELLOW:-}" "${level}" "${NC:-}" "${message}" >&2 ;;
+      ERROR)   printf '%b[%s]%b %s\n' "${RED:-}" "${level}" "${NC:-}" "${message}" >&2 ;;
       *)       printf "[%s] %s\n" "${level}" "${message}" ;;
     esac
   fi
@@ -74,9 +99,9 @@ section() {
   local title="${1}"
 
   if [[ "${QUIET}" != true ]]; then
-    printf "\n${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}\n"
-    printf "${BLUE:-}  %s${NC:-}\n" "${title}"
-    printf "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}\n"
+    printf '\n%b\n' "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}"
+    printf '%b  %s%b\n' "${BLUE:-}" "${title}" "${NC:-}"
+    printf '%b\n' "${BLUE:-}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC:-}"
   fi
 
   log_info "=== ${title} ==="

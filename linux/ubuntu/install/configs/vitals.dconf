@@ -1,0 +1,17 @@
+[/]
+alphabetize=false
+fixed-widths=false
+hide-icons=false
+hide-zeros=true
+hot-sensors=['_memory_usage_', '__network-rx_max__', '_processor_usage_', '__temperature_avg__']
+icon-style=1
+menu-centered=true
+position-in-panel=2
+show-battery=false
+show-fan=false
+show-gpu=false
+show-storage=false
+show-system=false
+show-voltage=false
+storage-path='/'
+use-higher-precision=false

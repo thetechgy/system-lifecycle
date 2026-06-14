@@ -46,6 +46,21 @@ REMOVE=false
 # Source Libraries
 # -----------------------------------------------------------------------------
 
+# Helper to check library exists before sourcing
+_check_lib() {
+  local lib="${1}"
+  if [[ ! -f "${lib}" ]]; then
+    echo "ERROR: Required library not found: ${lib}" >&2
+    echo "Ensure the script is run from within the system-lifecycle repository." >&2
+    exit 1
+  fi
+}
+
+_check_lib "${LIB_DIR}/colors.sh"
+_check_lib "${LIB_DIR}/logging.sh"
+_check_lib "${LIB_DIR}/utils.sh"
+_check_lib "${LIB_DIR}/version-check.sh"
+
 # shellcheck source=../../lib/colors.sh
 source "${LIB_DIR}/colors.sh"
 

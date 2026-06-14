@@ -1,0 +1,27 @@
+---
+workstation_security: true
+workstation_apps: true
+workstation_devtools: true
+workstation_extensions: true
+workstation_fastfetch: true
+
+ubuntu_pro_enabled: true
+ubuntu_pro_token: ""
+cis_profile: cis_level1_workstation
+usg_run_audit: true
+
+nodejs_version: "20"
+
+microsoft_key_url: https://packages.microsoft.com/keys/microsoft.asc
+microsoft_key_asc: /usr/share/keyrings/microsoft.asc
+microsoft_keyring: /usr/share/keyrings/microsoft.gpg
+
+gnome_extensions:
+  - uuid: Vitals@CoreCoding.com
+    name: Vitals
+    dconf_path: /org/gnome/shell/extensions/vitals/
+    dconf_file: linux/ubuntu/install/configs/vitals.dconf
+  - uuid: another-window-session-manager@gmail.com
+    name: AWSM
+    dconf_path: ""
+    dconf_file: ""

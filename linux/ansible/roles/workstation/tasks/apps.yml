@@ -1,0 +1,52 @@
+---
+- name: Configure Microsoft repository key
+  ansible.builtin.import_tasks: microsoft_repo.yml
+
+- name: Configure Microsoft Edge repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/microsoft-edge.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://packages.microsoft.com/repos/edge
+      Suites: stable
+      Components: main
+      Architectures: amd64
+      Signed-By: {{ microsoft_keyring }}
+  become: true
+  register: edge_repo
+
+- name: Configure VS Code repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/vscode.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://packages.microsoft.com/repos/code
+      Suites: stable
+      Components: main
+      Architectures: amd64
+      Signed-By: {{ microsoft_keyring }}
+  become: true
+  register: vscode_repo
+
+- name: Update apt cache for application repositories
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+  when: edge_repo is changed or vscode_repo is changed
+
+- name: Install workstation applications
+  ansible.builtin.apt:
+    name:
+      - microsoft-edge-stable
+      - code
+      - discord
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true

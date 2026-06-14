@@ -1,0 +1,22 @@
+---
+- name: Configure system-lifecycle aliases
+  ansible.builtin.blockinfile:
+    path: "{{ shell_aliases_file }}"
+    create: "{{ shell_aliases_state == 'present' }}"
+    backup: true
+    marker: "# {mark}"
+    marker_begin: ">>> system-lifecycle >>>"
+    marker_end: "<<< system-lifecycle <<<"
+    block: |
+      # Aliases managed by system-lifecycle - do not edit manually
+      alias linux-update='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/update-system.yml'
+      alias linux-update-check='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/update-system.yml --check'
+      alias linux-update-firmware='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/update-system.yml -e update_firmware=true'
+      alias linux-workstation='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/install-workstation.yml'
+      alias linux-workstation-check='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/install-workstation.yml --check'
+      alias linux-workstation-apps='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/install-workstation.yml --tags apps'
+      alias linux-workstation-devtools='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/install-workstation.yml --tags devtools'
+      alias linux-security='cd {{ ansible_root }} && ./scripts/ensure-ansible.sh && ansible-playbook -K playbooks/install-workstation.yml --tags security'
+    state: "{{ shell_aliases_state }}"
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"

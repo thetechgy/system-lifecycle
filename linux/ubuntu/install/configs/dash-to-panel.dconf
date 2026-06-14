@@ -1,0 +1,18 @@
+[/]
+animate-appicon-hover=true
+animate-appicon-hover-animation-extent={'RIPPLE': 4, 'PLANK': 4, 'SIMPLE': 1}
+appicon-style='NORMAL'
+dot-position='BOTTOM'
+extension-version=72
+global-border-radius=0
+hotkeys-overlay-combo='TEMPORARILY'
+panel-anchors='{"LGD-0x00000000":"MIDDLE"}'
+panel-element-positions='{"LGD-0x00000000":[{"element":"showAppsButton","visible":true,"position":"stackedTL"},{"element":"activitiesButton","visible":true,"position":"stackedTL"},{"element":"leftBox","visible":true,"position":"stackedTL"},{"element":"taskbar","visible":true,"position":"centerMonitor"},{"element":"centerBox","visible":true,"position":"stackedBR"},{"element":"rightBox","visible":true,"position":"stackedBR"},{"element":"dateMenu","visible":true,"position":"stackedBR"},{"element":"systemMenu","visible":true,"position":"stackedBR"},{"element":"desktopButton","visible":true,"position":"stackedBR"}]}'
+panel-lengths='{}'
+panel-positions='{"LGD-0x00000000":"BOTTOM"}'
+panel-sizes='{"LGD-0x00000000":61}'
+prefs-opened=false
+show-showdesktop-hover=true
+showdesktop-button-width=8
+trans-use-border=false
+window-preview-title-position='TOP'

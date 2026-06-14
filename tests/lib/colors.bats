@@ -14,25 +14,25 @@ setup() {
 # -----------------------------------------------------------------------------
 
 @test "RED is defined" {
-  [ -n "$RED" ]
+  [[ -v RED ]]
 }
 
 @test "GREEN is defined" {
-  [ -n "$GREEN" ]
+  [[ -v GREEN ]]
 }
 
 @test "YELLOW is defined" {
-  [ -n "$YELLOW" ]
+  [[ -v YELLOW ]]
 }
 
 @test "BLUE is defined" {
-  [ -n "$BLUE" ]
+  [[ -v BLUE ]]
 }
 
 @test "NC (no color) is defined" {
-  [ -n "$NC" ]
+  [[ -v NC ]]
 }
 
 @test "BOLD is defined" {
-  [ -n "$BOLD" ]
+  [[ -v BOLD ]]
 }
