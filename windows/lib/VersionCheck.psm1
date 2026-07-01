@@ -117,7 +117,7 @@ function Test-ForUpdates {
     # Only warn if actually behind (not ahead or diverged)
     if ($behindCount -gt 0) {
         Write-ColorOutput -Message "Version check: $behindCount commit(s) behind origin/main" -Color 'Yellow'
-        Write-Host '    Run: git pull'
+        Write-Host "    Run: git -C `"$repoRoot`" pull"
         Write-Host ''
     } else {
         Write-Host 'Version check: local changes ahead of or diverged from origin/main'

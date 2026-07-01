@@ -59,4 +59,25 @@ Describe 'Update-System ShouldProcess behavior' {
         $script:CalledPhases | Should -Contain 'Winget'
         $script:CalledPhases | Should -Contain 'Cleanup'
     }
+
+    It 'does not route skipped package managers through top-level phase guards' {
+        Main -DryRun -NoChocolatey -NoScoop -NoNpm -NoPatchMyPC | Should -Be 0
+
+        $script:CalledPhases | Should -Contain 'Windows'
+        $script:CalledPhases | Should -Contain 'Winget'
+        $script:CalledPhases | Should -Contain 'Cleanup'
+        $script:CalledPhases | Should -Not -Contain 'Chocolatey'
+        $script:CalledPhases | Should -Not -Contain 'Scoop'
+        $script:CalledPhases | Should -Not -Contain 'Npm'
+        $script:CalledPhases | Should -Not -Contain 'PatchMyPC'
+    }
+
+    It 'does not emit WhatIf messages for skipped package managers' {
+        $whatIfOutput = Main -WhatIf -NoChocolatey -NoScoop -NoNpm -NoPatchMyPC 6>&1 | Out-String
+
+        $whatIfOutput | Should -Not -Match 'Chocolatey packages'
+        $whatIfOutput | Should -Not -Match 'Scoop packages'
+        $whatIfOutput | Should -Not -Match 'npm global packages'
+        $whatIfOutput | Should -Not -Match 'PatchMyPC applications'
+    }
 }

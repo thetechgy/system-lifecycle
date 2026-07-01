@@ -1029,20 +1029,20 @@ function Main {
         Update-WingetPackages -DryRun:$DryRun
     }
 
-    if ($DryRun -or $PSCmdlet.ShouldProcess('Chocolatey packages', 'upgrade installed packages')) {
-        Update-ChocolateyPackages -DryRun:$DryRun -Skip:$NoChocolatey
+    if (-not $NoChocolatey -and ($DryRun -or $PSCmdlet.ShouldProcess('Chocolatey packages', 'upgrade installed packages'))) {
+        Update-ChocolateyPackages -DryRun:$DryRun
     }
 
-    if ($DryRun -or $PSCmdlet.ShouldProcess('Scoop packages', 'upgrade installed packages')) {
-        Update-ScoopPackages -DryRun:$DryRun -Skip:$NoScoop
+    if (-not $NoScoop -and ($DryRun -or $PSCmdlet.ShouldProcess('Scoop packages', 'upgrade installed packages'))) {
+        Update-ScoopPackages -DryRun:$DryRun
     }
 
-    if ($DryRun -or $PSCmdlet.ShouldProcess('npm global packages', 'upgrade installed packages')) {
-        Update-NpmPackages -DryRun:$DryRun -Skip:$NoNpm
+    if (-not $NoNpm -and ($DryRun -or $PSCmdlet.ShouldProcess('npm global packages', 'upgrade installed packages'))) {
+        Update-NpmPackages -DryRun:$DryRun
     }
 
-    if ($DryRun -or $PSCmdlet.ShouldProcess('PatchMyPC applications', 'install available application updates')) {
-        Update-PatchMyPC -DryRun:$DryRun -Skip:$NoPatchMyPC
+    if (-not $NoPatchMyPC -and ($DryRun -or $PSCmdlet.ShouldProcess('PatchMyPC applications', 'install available application updates'))) {
+        Update-PatchMyPC -DryRun:$DryRun
     }
 
     # Cleanup

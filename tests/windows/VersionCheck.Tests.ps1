@@ -32,4 +32,10 @@ Describe 'VersionCheck side effects' {
         $fetchBlock | Should -Not -BeNullOrEmpty
         $fetchBlock.Clauses[0].Item1.Extent.Text | Should -Be '$Fetch'
     }
+
+    It 'prints pull guidance anchored to the repository root' {
+        $source = Get-Content -Path $script:VersionModule -Raw
+
+        $source | Should -Match 'git -C .*repoRoot.* pull'
+    }
 }
