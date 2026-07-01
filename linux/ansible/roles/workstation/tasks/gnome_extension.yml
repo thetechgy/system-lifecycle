@@ -3,8 +3,8 @@
   ansible.builtin.assert:
     that:
       - gnome_extension.uuid is match('^[A-Za-z0-9_.@+-]+$')
-      - gnome_extension.dconf_path | length == 0 or gnome_extension.dconf_path is match('^/[A-Za-z0-9_/-]+/$')
-      - gnome_extension.dconf_file | length == 0 or gnome_extension.dconf_file is match('^linux/ubuntu/install/configs/[A-Za-z0-9_.-]+$')
+      - gnome_extension.dconf_path | default('') | length == 0 or gnome_extension.dconf_path | default('') is match('^/[A-Za-z0-9_/-]+/$')
+      - gnome_extension.dconf_file | default('') | length == 0 or gnome_extension.dconf_file | default('') is match('^linux/ubuntu/install/configs/[A-Za-z0-9_.-]+$')
     fail_msg: "GNOME extension settings must use safe UUIDs, dconf paths, and repository config paths."
 
 - name: Reset extension version tag
@@ -85,14 +85,14 @@
     argv:
       - dconf
       - load
-      - "{{ gnome_extension.dconf_path }}"
-    stdin: "{{ lookup('file', repo_root + '/' + gnome_extension.dconf_file) }}"
+      - "{{ gnome_extension.dconf_path | default('') }}"
+    stdin: "{{ lookup('file', repo_root + '/' + gnome_extension.dconf_file | default('')) }}"
   changed_when: false
   failed_when: false
   become: "{{ resolved_target_user != ansible_user_id }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
-    - gnome_extension.dconf_path | length > 0
-    - gnome_extension.dconf_file | length > 0
+    - gnome_extension.dconf_path | default('') | length > 0
+    - gnome_extension.dconf_file | default('') | length > 0
     - not ansible_check_mode

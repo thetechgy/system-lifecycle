@@ -142,6 +142,25 @@ ANSIBLE_DIR="${REPO_ROOT}/linux/ansible"
   [ "$status" -eq 0 ]
 }
 
+@test "gnome extension dconf checks tolerate missing keys" {
+  local gnome_file="${ANSIBLE_DIR}/roles/workstation/tasks/gnome_extension.yml"
+
+  run grep -n "dconf_path | default('') | length" "${gnome_file}"
+  [ "$status" -eq 0 ]
+
+  run grep -n "dconf_file | default('') | length" "${gnome_file}"
+  [ "$status" -eq 0 ]
+
+  run grep -n "gnome_extension.dconf_path | default('') }}" "${gnome_file}"
+  [ "$status" -eq 0 ]
+
+  run grep -n "gnome_extension.dconf_path | length" "${gnome_file}"
+  [ "$status" -ne 0 ]
+
+  run grep -n "gnome_extension.dconf_file | length" "${gnome_file}"
+  [ "$status" -ne 0 ]
+}
+
 @test "variable-bearing Ansible command tasks use argv or stdin" {
   run grep -R 'pro attach {{' "${ANSIBLE_DIR}/roles/workstation/tasks"
   [ "$status" -ne 0 ]
