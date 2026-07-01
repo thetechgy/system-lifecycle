@@ -43,6 +43,10 @@
     Preview changes without making them
 
 .EXAMPLE
+    .\Update-System.ps1 -WhatIf
+    Use PowerShell WhatIf semantics to skip state-changing update phases
+
+.EXAMPLE
     .\Update-System.ps1 -NoChocolatey -NoScoop
     Skip Chocolatey and Scoop updates
 
@@ -960,6 +964,33 @@ function Invoke-Cleanup {
 # -----------------------------------------------------------------------------
 
 function Main {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter()]
+        [switch]$DryRun,
+
+        [Parameter()]
+        [switch]$Quiet,
+
+        [Parameter()]
+        [switch]$NoNpm,
+
+        [Parameter()]
+        [switch]$NoChocolatey,
+
+        [Parameter()]
+        [switch]$NoScoop,
+
+        [Parameter()]
+        [switch]$NoPatchMyPC,
+
+        [Parameter()]
+        [switch]$IncludeDrivers,
+
+        [Parameter()]
+        [switch]$Clean
+    )
+
     # Version check first (before anything else)
     Test-ForUpdates
 
@@ -982,22 +1013,42 @@ function Main {
     Get-SystemInfo
 
     # Windows Update (primary)
-    Update-WindowsSystem -DryRun:$DryRun -IncludeDrivers:$IncludeDrivers
+    if ($DryRun -or $PSCmdlet.ShouldProcess('Windows Update', 'install available Windows updates')) {
+        Update-WindowsSystem -DryRun:$DryRun -IncludeDrivers:$IncludeDrivers
+    }
 
     # Vendor-specific firmware/drivers (Dell, Lenovo)
     if ($IncludeDrivers) {
-        Update-VendorFirmware -DryRun:$DryRun
+        if ($DryRun -or $PSCmdlet.ShouldProcess('Vendor firmware and drivers', 'install available firmware and driver updates')) {
+            Update-VendorFirmware -DryRun:$DryRun
+        }
     }
 
     # Package managers
-    Update-WingetPackages -DryRun:$DryRun
-    Update-ChocolateyPackages -DryRun:$DryRun -Skip:$NoChocolatey
-    Update-ScoopPackages -DryRun:$DryRun -Skip:$NoScoop
-    Update-NpmPackages -DryRun:$DryRun -Skip:$NoNpm
-    Update-PatchMyPC -DryRun:$DryRun -Skip:$NoPatchMyPC
+    if ($DryRun -or $PSCmdlet.ShouldProcess('winget packages', 'upgrade installed packages')) {
+        Update-WingetPackages -DryRun:$DryRun
+    }
+
+    if (-not $NoChocolatey -and ($DryRun -or $PSCmdlet.ShouldProcess('Chocolatey packages', 'upgrade installed packages'))) {
+        Update-ChocolateyPackages -DryRun:$DryRun
+    }
+
+    if (-not $NoScoop -and ($DryRun -or $PSCmdlet.ShouldProcess('Scoop packages', 'upgrade installed packages'))) {
+        Update-ScoopPackages -DryRun:$DryRun
+    }
+
+    if (-not $NoNpm -and ($DryRun -or $PSCmdlet.ShouldProcess('npm global packages', 'upgrade installed packages'))) {
+        Update-NpmPackages -DryRun:$DryRun
+    }
+
+    if (-not $NoPatchMyPC -and ($DryRun -or $PSCmdlet.ShouldProcess('PatchMyPC applications', 'install available application updates'))) {
+        Update-PatchMyPC -DryRun:$DryRun
+    }
 
     # Cleanup
-    Invoke-Cleanup -DryRun:$DryRun -Aggressive:$Clean
+    if ($DryRun -or $PSCmdlet.ShouldProcess('package and temporary caches', 'remove stale cache files')) {
+        Invoke-Cleanup -DryRun:$DryRun -Aggressive:$Clean
+    }
 
     Write-Section 'Update Complete'
 
@@ -1018,8 +1069,10 @@ function Main {
         Write-LogError "Update completed with errors (exit code: $Script:ExitCode)"
     }
 
-    exit $Script:ExitCode
+    return $Script:ExitCode
 }
 
 # Run main
-Main
+if ($MyInvocation.InvocationName -ne '.') {
+    exit (Main @PSBoundParameters)
+}

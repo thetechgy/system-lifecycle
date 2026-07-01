@@ -40,13 +40,42 @@
   become: true
   when: edge_repo is changed or vscode_repo is changed
 
-- name: Install workstation applications
+- name: Install workstation APT applications
   ansible.builtin.apt:
     name:
       - microsoft-edge-stable
       - code
-      - discord
     state: present
   environment:
     DEBIAN_FRONTEND: noninteractive
   become: true
+
+- name: Check whether Discord is available from configured APT sources
+  ansible.builtin.command:
+    argv:
+      - apt-cache
+      - policy
+      - discord
+  register: discord_apt_policy
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: workstation_install_discord | bool
+
+- name: Install Discord from configured APT sources
+  ansible.builtin.apt:
+    name: discord
+    state: present
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  become: true
+  when:
+    - workstation_install_discord | bool
+    - (discord_apt_policy.stdout | default('')) is search('(?m)^\\s*Candidate:\\s+(?!\\(none\\)$)\\S+')
+
+- name: Explain skipped Discord install
+  ansible.builtin.debug:
+    msg: "Discord was requested, but no configured APT source provides the discord package."
+  when:
+    - workstation_install_discord | bool
+    - not ((discord_apt_policy.stdout | default('')) is search('(?m)^\\s*Candidate:\\s+(?!\\(none\\)$)\\S+'))

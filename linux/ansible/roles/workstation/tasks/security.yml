@@ -1,4 +1,10 @@
 ---
+- name: Validate CIS profile selection
+  ansible.builtin.assert:
+    that:
+      - cis_profile in cis_profiles
+    fail_msg: "cis_profile must be one of: {{ cis_profiles | join(', ') }}"
+
 - name: Skip security hardening on WSL
   ansible.builtin.debug:
     msg: "WSL detected; skipping Ubuntu Pro and USG/CIS hardening."
@@ -17,7 +23,12 @@
     - ubuntu_pro_enabled | bool
 
 - name: Check Ubuntu Pro attachment
-  ansible.builtin.command: pro status --format json
+  ansible.builtin.command:
+    argv:
+      - pro
+      - status
+      - --format
+      - json
   register: pro_status
   changed_when: false
   failed_when: false
@@ -48,7 +59,11 @@
     - not ubuntu_pro_ready | default(false)
 
 - name: Attach Ubuntu Pro with provided token
-  ansible.builtin.command: "pro attach {{ ubuntu_pro_token }}"
+  ansible.builtin.command:
+    argv:
+      - pro
+      - attach
+      - "{{ ubuntu_pro_token }}"
   register: pro_attach
   changed_when: pro_attach.rc == 0
   no_log: true
@@ -61,7 +76,12 @@
     - not ansible_check_mode
 
 - name: Enable USG service
-  ansible.builtin.command: pro enable usg -y
+  ansible.builtin.command:
+    argv:
+      - pro
+      - enable
+      - usg
+      - -y
   register: pro_enable_usg
   changed_when: pro_enable_usg.rc == 0
   failed_when: >-
@@ -87,7 +107,11 @@
     - ubuntu_pro_ready | default(false)
 
 - name: Run CIS audit
-  ansible.builtin.command: "usg audit {{ cis_profile }}"
+  ansible.builtin.command:
+    argv:
+      - usg
+      - audit
+      - "{{ cis_profile }}"
   register: usg_audit
   changed_when: false
   failed_when: false
@@ -99,7 +123,12 @@
     - not ansible_check_mode
 
 - name: Create pre-hardening /etc backup
-  ansible.builtin.command: "tar czf /var/backups/system-lifecycle-etc-{{ ansible_date_time.iso8601_basic_short }}.tar.gz /etc"
+  ansible.builtin.command:
+    argv:
+      - tar
+      - czf
+      - "/var/backups/system-lifecycle-etc-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+      - /etc
   args:
     creates: "/var/backups/system-lifecycle-etc-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
   become: true
@@ -109,7 +138,11 @@
     - not ansible_check_mode
 
 - name: Apply CIS hardening
-  ansible.builtin.command: "usg fix {{ cis_profile }}"
+  ansible.builtin.command:
+    argv:
+      - usg
+      - fix
+      - "{{ cis_profile }}"
   register: usg_fix
   changed_when: usg_fix.rc == 0
   become: true

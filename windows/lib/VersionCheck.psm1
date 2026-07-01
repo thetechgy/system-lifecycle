@@ -6,8 +6,8 @@
 #   Test-ForUpdates
 #
 # Description:
-#   Compares local HEAD against origin/main and warns if behind.
-#   Gracefully skips if git unavailable, not a repo, or no network.
+#   Compares local HEAD against the locally cached origin/main ref and warns if
+#   behind. Fetching from the remote is opt-in.
 #
 # Dependencies:
 #   - Colors.psm1 (must be imported first by calling script)
@@ -38,17 +38,23 @@ function Get-RepoRoot {
     Checks for updates from origin/main.
 
 .DESCRIPTION
-    Compares the local HEAD against origin/main and warns if the local
-    repository is behind. Gracefully handles cases where git is not
-    available, the directory is not a repository, or the network is
-    unreachable.
+    Compares the local HEAD against the locally cached origin/main ref and warns
+    if the local repository is behind. Gracefully handles cases where git is not
+    available, the directory is not a repository, or the remote ref is missing.
+
+.PARAMETER Fetch
+    Fetch origin/main before comparing revisions. This is opt-in because the
+    default version check must be side-effect free.
 
 .EXAMPLE
     Test-ForUpdates
 #>
 function Test-ForUpdates {
     [CmdletBinding()]
-    param()
+    param(
+        [Parameter()]
+        [switch]$Fetch
+    )
 
     $repoRoot = Get-RepoRoot
 
@@ -65,25 +71,20 @@ function Test-ForUpdates {
         return
     }
 
-    # Fetch latest from origin (quietly, with timeout)
-    # GIT_TERMINAL_PROMPT=0 prevents credential prompts
-    try {
-        $env:GIT_TERMINAL_PROMPT = '0'
-
-        # Use Start-Process with timeout for the fetch
-        $fetchProcess = Start-Process -FilePath 'git' `
-            -ArgumentList "-C `"$repoRoot`" fetch origin main --quiet" `
-            -NoNewWindow -Wait -PassThru -ErrorAction Stop
-
-        if ($fetchProcess.ExitCode -ne 0) {
+    if ($Fetch) {
+        try {
+            $env:GIT_TERMINAL_PROMPT = '0'
+            $null = & git -C $repoRoot fetch origin main --quiet
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host 'Version check: skipped (unable to reach remote)'
+                return
+            }
+        } catch {
             Write-Host 'Version check: skipped (unable to reach remote)'
             return
+        } finally {
+            Remove-Item Env:\GIT_TERMINAL_PROMPT -ErrorAction SilentlyContinue
         }
-    } catch {
-        Write-Host 'Version check: skipped (unable to reach remote)'
-        return
-    } finally {
-        Remove-Item Env:\GIT_TERMINAL_PROMPT -ErrorAction SilentlyContinue
     }
 
     # Get local and remote revisions
@@ -95,6 +96,7 @@ function Test-ForUpdates {
     }
 
     if (-not $localRev -or -not $remoteRev) {
+        Write-Host 'Version check: skipped (origin/main ref not available)'
         return
     }
 
@@ -115,7 +117,7 @@ function Test-ForUpdates {
     # Only warn if actually behind (not ahead or diverged)
     if ($behindCount -gt 0) {
         Write-ColorOutput -Message "Version check: $behindCount commit(s) behind origin/main" -Color 'Yellow'
-        Write-Host "    Run: git -C $repoRoot pull"
+        Write-Host "    Run: git -C `"$repoRoot`" pull"
         Write-Host ''
     } else {
         Write-Host 'Version check: local changes ahead of or diverged from origin/main'

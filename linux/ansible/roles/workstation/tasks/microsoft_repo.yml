@@ -1,4 +1,12 @@
 ---
+- name: Validate Microsoft repository key settings
+  ansible.builtin.assert:
+    that:
+      - microsoft_key_url is match('^https://packages\.microsoft\.com/.+')
+      - microsoft_key_asc is match('^/[A-Za-z0-9._/-]+\.asc$')
+      - microsoft_keyring is match('^/[A-Za-z0-9._/-]+\.gpg$')
+    fail_msg: "Microsoft repository key variables must use trusted HTTPS source and absolute local key paths."
+
 - name: Install Microsoft repository dependencies
   ansible.builtin.apt:
     name:
@@ -25,7 +33,15 @@
   register: microsoft_keyring_stat
 
 - name: Install Microsoft dearmored keyring
-  ansible.builtin.command: "gpg --batch --yes --dearmor -o {{ microsoft_keyring }} {{ microsoft_key_asc }}"
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - -o
+      - "{{ microsoft_keyring }}"
+      - "{{ microsoft_key_asc }}"
   when: microsoft_key_download is changed or not microsoft_keyring_stat.stat.exists
   become: true
 
