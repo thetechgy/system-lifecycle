@@ -62,6 +62,25 @@ ANSIBLE_DIR="${REPO_ROOT}/linux/ansible"
   [ "$status" -eq 0 ]
 }
 
+@test "shell aliases do not change the caller directory" {
+  local alias_file="${ANSIBLE_DIR}/roles/shell_aliases/tasks/main.yml"
+
+  run grep -F "cd {{ ansible_root }}" "${alias_file}"
+  [ "$status" -ne 0 ]
+
+  run grep -c -F 'ANSIBLE_CONFIG="{{ ansible_root }}/ansible.cfg"' "${alias_file}"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 8 ]
+
+  run grep -c -F '"{{ ansible_root }}/scripts/ensure-ansible.sh"' "${alias_file}"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 8 ]
+
+  run grep -c -F '"{{ ansible_root }}/playbooks/' "${alias_file}"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 8 ]
+}
+
 @test "workstation role has expected phase tags" {
   local role_file="${ANSIBLE_DIR}/roles/workstation/tasks/main.yml"
 
@@ -74,6 +93,6 @@ ANSIBLE_DIR="${REPO_ROOT}/linux/ansible"
     skip "ansible-playbook is not installed"
   fi
 
-  run bash -c "cd '${ANSIBLE_DIR}' && ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml"
+  run env ANSIBLE_LOCAL_TEMP="${BATS_TEST_TMPDIR}/ansible-local" bash -c "cd '${ANSIBLE_DIR}' && ansible-playbook --syntax-check playbooks/update-system.yml playbooks/install-workstation.yml playbooks/configure-shell.yml"
   [ "$status" -eq 0 ]
 }
