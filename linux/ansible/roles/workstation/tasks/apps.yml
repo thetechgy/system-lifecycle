@@ -71,11 +71,11 @@
   become: true
   when:
     - workstation_install_discord | bool
-    - "'Candidate: (none)' not in (discord_apt_policy.stdout | default(''))"
+    - (discord_apt_policy.stdout | default('')) is search('(?m)^\\s*Candidate:\\s+(?!\\(none\\)$)\\S+')
 
 - name: Explain skipped Discord install
   ansible.builtin.debug:
     msg: "Discord was requested, but no configured APT source provides the discord package."
   when:
     - workstation_install_discord | bool
-    - "'Candidate: (none)' in (discord_apt_policy.stdout | default('Candidate: (none)'))"
+    - not ((discord_apt_policy.stdout | default('')) is search('(?m)^\\s*Candidate:\\s+(?!\\(none\\)$)\\S+'))

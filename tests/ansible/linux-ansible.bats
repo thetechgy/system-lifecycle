@@ -131,6 +131,15 @@ ANSIBLE_DIR="${REPO_ROOT}/linux/ansible"
 
   run grep -n "Install Discord from configured APT sources" "${apps_file}"
   [ "$status" -eq 0 ]
+
+  run grep -n "is search(" "${apps_file}"
+  [ "$status" -eq 0 ]
+
+  run grep -n "\\(none\\)" "${apps_file}"
+  [ "$status" -eq 0 ]
+
+  run grep -n "Explain skipped Discord install" "${apps_file}"
+  [ "$status" -eq 0 ]
 }
 
 @test "variable-bearing Ansible command tasks use argv or stdin" {
