@@ -40,9 +40,13 @@
   become: true
   when: not ansible_check_mode
 
-- name: Check whether Claude CLI exists for target user
-  ansible.builtin.command: /bin/sh -c 'command -v claude >/dev/null 2>&1'
-  register: claude_check
+- name: Check whether npm is available for AI CLI management
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - npm
+      - --version
+  register: ai_cli_npm_check
   changed_when: false
   failed_when: false
   check_mode: false
@@ -50,38 +54,63 @@
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
 
-- name: Download Claude CLI installer
-  ansible.builtin.get_url:
-    url: https://storage.googleapis.com/claudeai/claude-cli/install.sh
-    dest: /tmp/claude-install.sh
-    mode: "0755"
-  when:
-    - claude_check.rc != 0
-    - not ansible_check_mode
-
-- name: Install Claude CLI for target user
-  ansible.builtin.command: /bin/sh /tmp/claude-install.sh
-  register: claude_install
-  changed_when: claude_install.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
-  become_user: "{{ resolved_target_user }}"
-  environment: "{{ target_user_environment }}"
-  when:
-    - claude_check.rc != 0
-    - not ansible_check_mode
-
-- name: Check whether npm is available for Codex CLI
-  ansible.builtin.command: /bin/sh -c 'command -v npm >/dev/null 2>&1'
-  register: codex_npm_check
+- name: Check whether Copilot CLI is installed
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - copilot
+      - --version
+  register: copilot_check
   changed_when: false
   failed_when: false
   check_mode: false
   become: "{{ resolved_target_user != ansible_user_id }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
+
+- name: Update installed Copilot CLI
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - copilot
+      - update
+  register: copilot_update
+  changed_when: copilot_update.rc == 0
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - copilot_check.rc == 0
+    - not ansible_check_mode
+
+- name: Install Copilot CLI for target user
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - npm
+      - install
+      - -g
+      - "@github/copilot"
+  register: copilot_install
+  changed_when: copilot_install.rc == 0
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - ai_cli_npm_check.rc == 0
+    - copilot_check.rc != 0
+    - workstation_install_copilot_cli | bool
+    - not ansible_check_mode
 
 - name: Check whether Codex CLI is installed
-  ansible.builtin.command: npm list -g @openai/codex
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - npm
+      - list
+      - -g
+      - "@openai/codex"
+      - --depth=0
   register: codex_check
   changed_when: false
   failed_when: false
@@ -89,16 +118,41 @@
   become: "{{ resolved_target_user != ansible_user_id }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
-  when: codex_npm_check.rc == 0
+  when: ai_cli_npm_check.rc == 0
+
+- name: Update npm-managed Codex CLI
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - npm
+      - update
+      - -g
+      - "@openai/codex"
+  register: codex_update
+  changed_when: codex_update.rc == 0
+  become: "{{ resolved_target_user != ansible_user_id }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: "{{ target_user_environment }}"
+  when:
+    - ai_cli_npm_check.rc == 0
+    - codex_check.rc | default(1) == 0
+    - not ansible_check_mode
 
 - name: Install Codex CLI for target user
-  ansible.builtin.command: npm install -g @openai/codex
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/env
+      - npm
+      - install
+      - -g
+      - "@openai/codex"
   register: codex_install
   changed_when: codex_install.rc == 0
   become: "{{ resolved_target_user != ansible_user_id }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
-    - codex_npm_check.rc == 0
+    - ai_cli_npm_check.rc == 0
     - codex_check.rc | default(1) != 0
+    - workstation_install_codex_cli | bool
     - not ansible_check_mode

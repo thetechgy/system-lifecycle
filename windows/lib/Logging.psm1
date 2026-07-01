@@ -11,7 +11,17 @@
 #
 
 # Default log directory (can be overridden)
-$Script:LogDir = Join-Path $env:LOCALAPPDATA 'system-lifecycle\logs'
+$defaultLogRoot = if ($env:LOCALAPPDATA) {
+    $env:LOCALAPPDATA
+} elseif ($env:XDG_STATE_HOME) {
+    $env:XDG_STATE_HOME
+} elseif ($HOME) {
+    Join-Path $HOME '.local/state'
+} else {
+    [System.IO.Path]::GetTempPath()
+}
+
+$Script:LogDir = Join-Path (Join-Path $defaultLogRoot 'system-lifecycle') 'logs'
 $Script:LogFile = $null
 $Script:Quiet = $false
 

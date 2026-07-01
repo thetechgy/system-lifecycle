@@ -4,10 +4,18 @@ workstation_apps: true
 workstation_devtools: true
 workstation_extensions: true
 workstation_fastfetch: true
+workstation_install_copilot_cli: false
+workstation_install_codex_cli: false
+workstation_install_discord: false
 
 ubuntu_pro_enabled: true
 ubuntu_pro_token: ""
 cis_profile: cis_level1_workstation
+cis_profiles:
+  - cis_level1_workstation
+  - cis_level2_workstation
+  - cis_level1_server
+  - cis_level2_server
 usg_run_audit: true
 
 nodejs_version: "20"

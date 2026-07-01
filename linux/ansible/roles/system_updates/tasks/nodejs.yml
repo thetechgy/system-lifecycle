@@ -1,6 +1,15 @@
 ---
+- name: Validate Node.js snap channel
+  ansible.builtin.assert:
+    that:
+      - nodejs_version is match('^[0-9]+(/[A-Za-z]+)?$')
+    fail_msg: "nodejs_version must be a snap channel such as 20 or 20/stable."
+
 - name: Check whether snap is installed
-  ansible.builtin.command: snap --version
+  ansible.builtin.command:
+    argv:
+      - snap
+      - --version
   register: node_snap_check
   changed_when: false
   failed_when: false
@@ -12,7 +21,11 @@
   when: node_snap_check.rc != 0
 
 - name: Check whether snap Node.js is installed
-  ansible.builtin.command: snap list node
+  ansible.builtin.command:
+    argv:
+      - snap
+      - list
+      - node
   register: node_snap_list
   changed_when: false
   failed_when: false
@@ -20,7 +33,12 @@
   become: true
 
 - name: Refresh snap Node.js channel
-  ansible.builtin.command: "snap refresh node --channel={{ nodejs_version }}"
+  ansible.builtin.command:
+    argv:
+      - snap
+      - refresh
+      - node
+      - "--channel={{ nodejs_version }}"
   register: node_snap_refresh
   changed_when: node_snap_refresh.rc == 0
   when:
@@ -29,7 +47,13 @@
   become: true
 
 - name: Install snap Node.js
-  ansible.builtin.command: "snap install node --classic --channel={{ nodejs_version }}"
+  ansible.builtin.command:
+    argv:
+      - snap
+      - install
+      - node
+      - --classic
+      - "--channel={{ nodejs_version }}"
   register: node_snap_install
   changed_when: node_snap_install.rc == 0
   when:

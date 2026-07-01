@@ -1,10 +1,21 @@
 ---
+- name: Validate {{ gnome_extension.name }} extension settings
+  ansible.builtin.assert:
+    that:
+      - gnome_extension.uuid is match('^[A-Za-z0-9_.@+-]+$')
+      - gnome_extension.dconf_path | length == 0 or gnome_extension.dconf_path is match('^/[A-Za-z0-9_/-]+/$')
+      - gnome_extension.dconf_file | length == 0 or gnome_extension.dconf_file is match('^linux/ubuntu/install/configs/[A-Za-z0-9_.-]+$')
+    fail_msg: "GNOME extension settings must use safe UUIDs, dconf paths, and repository config paths."
+
 - name: Reset extension version tag
   ansible.builtin.set_fact:
     gnome_extension_version_tag: ""
 
 - name: Check whether {{ gnome_extension.name }} is installed
-  ansible.builtin.command: gnome-extensions list
+  ansible.builtin.command:
+    argv:
+      - gnome-extensions
+      - list
   register: gnome_extension_list
   changed_when: false
   failed_when: false
@@ -40,7 +51,12 @@
     - not ansible_check_mode
 
 - name: Install {{ gnome_extension.name }} extension
-  ansible.builtin.command: "gnome-extensions install --force /tmp/{{ gnome_extension.uuid | regex_replace('[^A-Za-z0-9_.-]', '_') }}.zip"
+  ansible.builtin.command:
+    argv:
+      - gnome-extensions
+      - install
+      - --force
+      - "/tmp/{{ gnome_extension.uuid | regex_replace('[^A-Za-z0-9_.-]', '_') }}.zip"
   register: gnome_extension_install
   changed_when: gnome_extension_install.rc == 0
   become: "{{ resolved_target_user != ansible_user_id }}"
@@ -52,7 +68,11 @@
     - not ansible_check_mode
 
 - name: Enable {{ gnome_extension.name }} extension
-  ansible.builtin.command: "gnome-extensions enable {{ gnome_extension.uuid }}"
+  ansible.builtin.command:
+    argv:
+      - gnome-extensions
+      - enable
+      - "{{ gnome_extension.uuid }}"
   changed_when: false
   failed_when: false
   become: "{{ resolved_target_user != ansible_user_id }}"
@@ -61,9 +81,12 @@
   when: not ansible_check_mode
 
 - name: Apply {{ gnome_extension.name }} dconf configuration
-  ansible.builtin.shell: "dconf load {{ gnome_extension.dconf_path }} < {{ repo_root }}/{{ gnome_extension.dconf_file }}"
-  args:
-    executable: /bin/bash
+  ansible.builtin.command:
+    argv:
+      - dconf
+      - load
+      - "{{ gnome_extension.dconf_path }}"
+    stdin: "{{ lookup('file', repo_root + '/' + gnome_extension.dconf_file) }}"
   changed_when: false
   failed_when: false
   become: "{{ resolved_target_user != ansible_user_id }}"

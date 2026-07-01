@@ -1,0 +1,91 @@
+name: PowerShell Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-linux:
+    name: Parse and analyze on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Parse Windows PowerShell files
+        shell: pwsh
+        run: |
+          $parseErrors = @()
+          Get-ChildItem -Path windows -Recurse -Include *.ps1,*.psm1 | ForEach-Object {
+              $tokens = $null
+              $errors = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors) {
+                  $parseErrors += $errors
+              }
+          }
+
+          if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-List | Out-String | Write-Error
+              throw "PowerShell parse errors found."
+          }
+
+      - name: Run PSScriptAnalyzer error checks
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path windows -Recurse -Severity Error
+          if ($results) {
+              $results | Format-Table -AutoSize | Out-String | Write-Error
+              throw "PSScriptAnalyzer errors found."
+          }
+
+  runtime-windows:
+    name: Import and test on Windows
+    runs-on: windows-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: Import modules on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module .\windows\lib\Colors.psm1 -Force
+          Import-Module .\windows\lib\Logging.psm1 -Force
+          Import-Module .\windows\lib\Utils.psm1 -Force
+          Import-Module .\windows\lib\VersionCheck.psm1 -Force
+
+      - name: Run focused Pester tests
+        shell: pwsh
+        run: Invoke-Pester -Path tests/windows -CI

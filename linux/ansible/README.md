@@ -75,10 +75,13 @@ ansible-playbook -K playbooks/install-workstation.yml --tags security
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `workstation_security` | `true` | Ubuntu Pro and USG/CIS phase |
-| `workstation_apps` | `true` | Edge, VS Code, Discord |
+| `workstation_apps` | `true` | Edge and VS Code |
 | `workstation_devtools` | `true` | Node.js, AI CLIs, PowerShell, gh, rg, fd, jq |
 | `workstation_extensions` | `true` | GNOME extensions and dconf settings |
 | `workstation_fastfetch` | `true` | Fastfetch install and config |
+| `workstation_install_discord` | `false` | Install Discord only when a configured APT source provides it |
+| `workstation_install_copilot_cli` | `false` | Install Copilot CLI when missing; installed Copilot CLI is updated |
+| `workstation_install_codex_cli` | `false` | Install Codex CLI when missing; npm-managed Codex CLI is updated |
 | `ubuntu_pro_token` | `""` | Optional token for noninteractive Pro attach |
 | `cis_profile` | `cis_level1_workstation` | USG profile |
 | `target_user` | auto | User for npm, CLI tools, GNOME, and user config |
@@ -94,5 +97,7 @@ ansible-playbook -K playbooks/install-workstation.yml --tags security
 ## Notes
 
 - Node.js is managed through Snap to match the workstation install model.
+- First-time Copilot CLI and Codex CLI installs are opt-in; existing managed installations are updated.
+- Discord is not installed by default because this role does not configure a Discord package source.
 - User-scoped commands run as `target_user`, with user `HOME`, `PATH`, `XDG_RUNTIME_DIR`, and DBus environment set.
 - Firmware and USG/CIS hardening are skipped on WSL where they do not apply.

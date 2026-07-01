@@ -1,6 +1,9 @@
 ---
 - name: Check whether GNOME Shell is available
-  ansible.builtin.command: gnome-shell --version
+  ansible.builtin.command:
+    argv:
+      - gnome-shell
+      - --version
   register: gnome_shell_check
   changed_when: false
   failed_when: false
@@ -30,7 +33,11 @@
   when: gnome_shell_check.rc == 0
 
 - name: Enable dash-to-panel extension
-  ansible.builtin.command: gnome-extensions enable dash-to-panel@jderose9.github.com
+  ansible.builtin.command:
+    argv:
+      - gnome-extensions
+      - enable
+      - dash-to-panel@jderose9.github.com
   changed_when: false
   failed_when: false
   become: "{{ resolved_target_user != ansible_user_id }}"
@@ -41,9 +48,12 @@
     - not ansible_check_mode
 
 - name: Apply dash-to-panel configuration
-  ansible.builtin.shell: "dconf load /org/gnome/shell/extensions/dash-to-panel/ < {{ repo_root }}/linux/ubuntu/install/configs/dash-to-panel.dconf"
-  args:
-    executable: /bin/bash
+  ansible.builtin.command:
+    argv:
+      - dconf
+      - load
+      - /org/gnome/shell/extensions/dash-to-panel/
+    stdin: "{{ lookup('file', repo_root + '/linux/ubuntu/install/configs/dash-to-panel.dconf') }}"
   changed_when: false
   failed_when: false
   become: "{{ resolved_target_user != ansible_user_id }}"

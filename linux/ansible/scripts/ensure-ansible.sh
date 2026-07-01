@@ -25,13 +25,13 @@ readonly LIB_DIR="${SCRIPT_DIR}/../../lib"
 DRY_RUN=false
 readonly REQUIRED_PACKAGES=(ansible-core python3-apt python3-yaml)
 
-# shellcheck source=../../lib/colors.sh
+# shellcheck source=linux/lib/colors.sh
 source "${LIB_DIR}/colors.sh"
 
-# shellcheck source=../../lib/logging.sh
+# shellcheck source=linux/lib/logging.sh
 source "${LIB_DIR}/logging.sh"
 
-# shellcheck source=../../lib/utils.sh
+# shellcheck source=linux/lib/utils.sh
 source "${LIB_DIR}/utils.sh"
 
 show_usage() {
