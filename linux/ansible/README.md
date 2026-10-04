@@ -4,7 +4,7 @@ Native Ansible playbooks for Linux system lifecycle work.
 
 ## Prerequisites
 
-- Ubuntu 24.04 LTS or compatible Debian-based distribution
+- Ubuntu 24.04 LTS or 26.04 LTS, or compatible Debian-based distribution
 - Ansible Core 2.15+ (`ansible-playbook`)
 - Sudo privileges for system-level changes
 
@@ -22,6 +22,49 @@ Install missing Ansible runtime packages:
 ```
 
 The managed aliases also run `ensure-ansible.sh` before invoking `ansible-playbook`.
+
+## Sudo Compatibility
+
+All three playbooks load their shared execution context before privileged tasks,
+including tagged and check-mode runs. When the default sudo is sudo-rs, this
+context verifies that classic `sudo.ws` is usable and selects it for Ansible.
+This handles the [sudo-rs password prompt incompatibility](https://github.com/ansible/ansible/issues/85837)
+in affected Ansible versions. Ubuntu 24.04's traditional sudo remains the default.
+Selection is local to the playbook run; password authentication and the system's
+sudo provider remain in place.
+
+Explicit executable settings in inventory, extra variables, environment, or either
+Ansible sudo configuration section take precedence over automatic selection. For
+example:
+
+```bash
+ansible-playbook -K playbooks/update-system.yml -e ansible_become_exe=sudo.ws
+```
+
+The standard `ANSIBLE_BECOME_EXE` environment setting is also supported. An explicit
+`ansible_become_exe=sudo` retains sudo-rs when using an Ansible runtime that supports
+its password prompt. Automatic selection affects the sudo plugin's executable.
+Non-sudo `ansible_become_method` settings bypass detection.
+
+If sudo-rs is detected and classic sudo is missing or unusable, the preflight stops
+with recovery guidance. Install Ubuntu's classic sudo package from your terminal:
+
+```bash
+sudo apt-get install sudo
+```
+
+Verify a fresh password prompt with this read-only authentication check in your own
+terminal. It should return `0` from `id -u`, confirming execution as root. The `-k`
+flag makes this request ignore cached sudo credentials.
+
+```bash
+ansible localhost -i localhost, -c local -b -K \
+  -m ansible.builtin.command -a 'id -u' \
+  -e '{"ansible_become_exe": "sudo.ws", "ansible_become_flags": "-H -S -k"}'
+```
+
+The Linux roles read gathered user and kernel facts through `ansible_facts`, so
+they also work with `ANSIBLE_INJECT_FACTS_AS_VARS=False`.
 
 ## Configure Shell Aliases
 

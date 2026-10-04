@@ -32,7 +32,7 @@
     flatpak_user_update.rc != 0 and
     'Nothing to do' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default('')) and
     'No remote refs found' not in (flatpak_user_update.stdout | default('') ~ flatpak_user_update.stderr | default(''))
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:

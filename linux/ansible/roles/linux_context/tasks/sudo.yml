@@ -1,0 +1,52 @@
+---
+# Keep automatic selection below explicitly configured executables. Checking
+# both INI sections also preserves an explicit `sudo` override on Ansible 2.15.
+- name: Select compatible sudo for the default configuration
+  become: false
+  when:
+    - ansible_become_method | default(lookup('ansible.builtin.config', 'DEFAULT_BECOME_METHOD')) in ['sudo', 'ansible.builtin.sudo']
+    - ansible_become_exe is not defined
+    - ansible_sudo_exe is not defined
+    - lookup('ansible.builtin.config', 'DEFAULT_BECOME_EXE') is none
+    - lookup('ansible.builtin.env', 'ANSIBLE_SUDO_EXE') | length == 0
+    - lookup('ansible.builtin.config', 'become_exe', plugin_type='become', plugin_name='sudo') == 'sudo'
+    - >-
+      ansible_config_file is not defined or
+      lookup('ansible.builtin.ini', 'executable', section='sudo_become_plugin', file=ansible_config_file, errors='ignore') | default('', true) | length == 0
+  block:
+    - name: Read the default sudo implementation
+      ansible.builtin.command:
+        argv: [sudo, --version]
+      environment:
+        LC_ALL: C
+      register: linux_context_sudo_version
+      changed_when: false
+      check_mode: false
+
+    - name: Select classic sudo when sudo-rs is the default
+      when: "'sudo-rs' in (linux_context_sudo_version.stdout ~ linux_context_sudo_version.stderr) | lower"
+      block:
+        - name: Check whether classic sudo is usable
+          ansible.builtin.command:
+            argv: [sudo.ws, --version]
+          environment:
+            LC_ALL: C
+          register: linux_context_classic_sudo_version
+          changed_when: false
+          check_mode: false
+          failed_when: false
+
+        - name: Require classic sudo for automatic sudo-rs compatibility
+          ansible.builtin.assert:
+            that:
+              - linux_context_classic_sudo_version.rc == 0
+              - "'sudo-rs' not in (linux_context_classic_sudo_version.stdout ~ linux_context_classic_sudo_version.stderr) | lower"
+            fail_msg: >-
+              The default sudo is sudo-rs, whose password prompt is incompatible
+              with some Ansible versions. Install Ubuntu's classic sudo package
+              (`sudo apt-get install sudo`) to provide sudo.ws, or explicitly
+              configure ansible_become_exe for a compatible executable/runtime.
+
+        - name: Use classic sudo for subsequent privileged tasks
+          ansible.builtin.set_fact:
+            ansible_sudo_exe: sudo.ws

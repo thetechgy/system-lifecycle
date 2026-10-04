@@ -18,5 +18,5 @@
       alias linux-workstation-devtools='"{{ ansible_root }}/scripts/ensure-ansible.sh" && ANSIBLE_CONFIG="{{ ansible_root }}/ansible.cfg" ansible-playbook -K "{{ ansible_root }}/playbooks/install-workstation.yml" --tags devtools'
       alias linux-security='"{{ ansible_root }}/scripts/ensure-ansible.sh" && ANSIBLE_CONFIG="{{ ansible_root }}/ansible.cfg" ansible-playbook -K "{{ ansible_root }}/playbooks/install-workstation.yml" --tags security'
     state: "{{ shell_aliases_state }}"
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"

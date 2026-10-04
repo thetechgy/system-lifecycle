@@ -5,7 +5,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
 
@@ -20,7 +20,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when: npm_check.rc == 0
@@ -29,7 +29,7 @@
   ansible.builtin.command: npm update -g
   register: npm_update_result
   changed_when: npm_update_result.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
