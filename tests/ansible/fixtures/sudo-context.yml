@@ -23,7 +23,16 @@
         that:
           - lookup('ansible.builtin.config', 'become_exe', plugin_type='become', plugin_name='sudo') == expected_executable
       become: false
-      when: ansible_become_method | default('sudo') in ['sudo', 'ansible.builtin.sudo']
+      when: linux_context_become_context.become_method in ['sudo', 'ansible.builtin.sudo', 'ansible.legacy.sudo']
+      tags: always
+
+    - name: Verify the resolved privilege escalation method
+      ansible.builtin.assert:
+        that:
+          - linux_context_become_context.become_method == expected_method
+          - not linux_context_become_context.changed
+      become: false
+      when: expected_method is defined
       tags: always
 
     - name: Verify automatic selection was skipped
@@ -38,7 +47,8 @@
       ansible.builtin.assert:
         that:
           - ansible_become_exe is not defined
+          - ansible_sudo_exe is not defined
           - lookup('ansible.builtin.config', 'become_exe', plugin_type='become', plugin_name='su') == 'su'
       become: false
-      when: verify_other_plugin | default(false) | bool
+      when: linux_context_become_context.become_method == 'su'
       tags: always

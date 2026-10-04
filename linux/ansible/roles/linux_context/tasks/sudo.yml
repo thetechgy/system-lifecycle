@@ -1,10 +1,15 @@
 ---
+- name: Read the effective privilege escalation method
+  ansible.legacy.linux_context_become_method:
+  become: false
+  register: linux_context_become_context
+
 # Keep automatic selection below explicitly configured executables. Checking
 # both INI sections also preserves an explicit `sudo` override on Ansible 2.15.
 - name: Select compatible sudo for the default configuration
   become: false
   when:
-    - ansible_become_method | default(lookup('ansible.builtin.config', 'DEFAULT_BECOME_METHOD')) in ['sudo', 'ansible.builtin.sudo']
+    - linux_context_become_context.become_method in ['sudo', 'ansible.builtin.sudo', 'ansible.legacy.sudo']
     - ansible_become_exe is not defined
     - ansible_sudo_exe is not defined
     - lookup('ansible.builtin.config', 'DEFAULT_BECOME_EXE') is none

@@ -57,7 +57,8 @@ ansible-playbook -K playbooks/update-system.yml -e update_firmware=true
 On Ubuntu 26.04, the shared playbook context detects sudo-rs and uses the installed
 classic `sudo.ws` executable for Ansible password authentication. Ubuntu 24.04
 continues using its default sudo. Explicit Ansible executable overrides take
-precedence. See [sudo compatibility and authentication checks](linux/ansible/README.md#sudo-compatibility)
+precedence. Non-sudo become methods, including CLI-selected methods, bypass
+detection. See [sudo compatibility and authentication checks](linux/ansible/README.md#sudo-compatibility)
 for recovery instructions.
 
 ## Linux Ansible Model

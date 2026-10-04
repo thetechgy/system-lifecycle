@@ -21,6 +21,7 @@ setup() {
   export SUDO_TEST_IMPLEMENTATION=rust
   export SUDO_TEST_CLASSIC_IMPLEMENTATION=classic
   export SUDO_PROBE_LOG="${BATS_TEST_TMPDIR}/sudo-probes"
+  SUDO_FIXTURE_PLAYBOOK="${FIXTURE_DIR}/sudo-context.yml"
   FIXTURE_BIN="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${FIXTURE_BIN}"
   cat > "${ANSIBLE_CONFIG}" <<'EOF'
@@ -72,7 +73,7 @@ EOF
 }
 
 run_sudo_fixture() {
-  run ansible-playbook -i localhost, "${FIXTURE_DIR}/sudo-context.yml" \
+  run ansible-playbook -i localhost, "${SUDO_FIXTURE_PLAYBOOK}" \
     -e "fixture_bin=${FIXTURE_BIN}" -e expected_executable="${1}" "${@:2}"
 }
 
@@ -179,14 +180,109 @@ EOF
 }
 
 @test "other become methods skip sudo compatibility probes" {
-  run_sudo_fixture unused -e ansible_become_method=su -e expect_no_probes=true
+  run_sudo_fixture unused -e ansible_become_method=su -e expected_method=su -e expect_no_probes=true
   assert_unchanged_success
   [ ! -e "${SUDO_PROBE_LOG}" ]
 }
 
-@test "automatic sudo selection does not change another CLI-selected plugin executable" {
-  run_sudo_fixture sudo.ws --become-method su -e verify_other_plugin=true
+@test "CLI-selected su skips sudo compatibility probes" {
+  run_sudo_fixture unused --become-method su -e expected_method=su -e expect_no_probes=true
   assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "CLI-selected su works without classic sudo" {
+  rm "${FIXTURE_BIN}/sudo.ws"
+  run_sudo_fixture unused --become-method su -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "CLI-selected su works without any sudo executable in tagged check mode" {
+  rm "${FIXTURE_BIN}/sudo" "${FIXTURE_BIN}/sudo.ws"
+  run_sudo_fixture unused --become-method su --check --tags fixture \
+    -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "configured su skips sudo compatibility probes" {
+  sed -i 's/become_method = sudo/become_method = su/' "${ANSIBLE_CONFIG}"
+  run_sudo_fixture unused -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "environment-selected su skips sudo compatibility probes" {
+  export ANSIBLE_BECOME_METHOD=su
+  run_sudo_fixture unused -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "CLI-selected sudo overrides configured su and still selects classic sudo" {
+  sed -i 's/become_method = sudo/become_method = su/' "${ANSIBLE_CONFIG}"
+  run_sudo_fixture sudo.ws --become-method sudo -e expected_method=sudo
+  assert_unchanged_success
+  [ "$(cat "${SUDO_PROBE_LOG}")" = $'sudo --version\nsudo.ws --version' ]
+}
+
+@test "inventory su overrides CLI-selected sudo without requiring classic sudo" {
+  rm "${FIXTURE_BIN}/sudo.ws"
+  cat > "${BATS_TEST_TMPDIR}/inventory.yml" <<'EOF'
+all:
+  hosts:
+    localhost:
+      ansible_become_method: su
+EOF
+  run_sudo_fixture unused -i "${BATS_TEST_TMPDIR}/inventory.yml" --become-method sudo \
+    -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "extra-variable sudo overrides CLI-selected su and selects classic sudo" {
+  run_sudo_fixture sudo.ws --become-method su -e ansible_become_method=sudo -e expected_method=sudo
+  assert_unchanged_success
+  [ "$(cat "${SUDO_PROBE_LOG}")" = $'sudo --version\nsudo.ws --version' ]
+}
+
+@test "play keyword su overrides CLI-selected sudo without requiring classic sudo" {
+  rm "${FIXTURE_BIN}/sudo.ws"
+  SUDO_FIXTURE_PLAYBOOK="${BATS_TEST_TMPDIR}/play-method.yml"
+  sed '/^  connection: local$/a\  become_method: su' \
+    "${FIXTURE_DIR}/sudo-context.yml" > "${SUDO_FIXTURE_PLAYBOOK}"
+  run_sudo_fixture unused --become-method sudo -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "inherited block keyword su overrides play keyword sudo in tagged check mode" {
+  rm "${FIXTURE_BIN}/sudo.ws"
+  SUDO_FIXTURE_PLAYBOOK="${BATS_TEST_TMPDIR}/block-method.yml"
+  sed -e '/^  connection: local$/a\  become_method: sudo' \
+    -e '/^        apply:$/a\          become_method: su' \
+    "${FIXTURE_DIR}/sudo-context.yml" > "${SUDO_FIXTURE_PLAYBOOK}"
+  run_sudo_fixture unused --check --tags fixture -e expected_method=su -e expect_no_probes=true
+  assert_unchanged_success
+  [ ! -e "${SUDO_PROBE_LOG}" ]
+}
+
+@test "extra-variable sudo overrides inherited block keyword su" {
+  SUDO_FIXTURE_PLAYBOOK="${BATS_TEST_TMPDIR}/block-method.yml"
+  sed '/^        apply:$/a\          become_method: su' \
+    "${FIXTURE_DIR}/sudo-context.yml" > "${SUDO_FIXTURE_PLAYBOOK}"
+  run_sudo_fixture sudo.ws -e ansible_become_method=sudo -e expected_method=sudo
+  assert_unchanged_success
+  [ "$(cat "${SUDO_PROBE_LOG}")" = $'sudo --version\nsudo.ws --version' ]
+}
+
+@test "fully qualified builtin sudo methods select classic sudo" {
+  local method
+  for method in ansible.builtin.sudo ansible.legacy.sudo; do
+    run_sudo_fixture sudo.ws --become-method "${method}" -e "expected_method=${method}"
+    assert_unchanged_success
+  done
 }
 
 @test "sudo selection runs in tagged check mode without reporting changes" {

@@ -44,7 +44,10 @@ ansible-playbook -K playbooks/update-system.yml -e ansible_become_exe=sudo.ws
 The standard `ANSIBLE_BECOME_EXE` environment setting is also supported. An explicit
 `ansible_become_exe=sudo` retains sudo-rs when using an Ansible runtime that supports
 its password prompt. Automatic selection affects the sudo plugin's executable.
-Non-sudo `ansible_become_method` settings bypass detection.
+Detection uses Ansible's resolved become method, respecting command-line options,
+inherited play/block keywords, and inventory or extra-variable precedence.
+Non-sudo methods, including `--become-method su`, bypass all sudo probes and leave
+their executable settings unchanged.
 
 If sudo-rs is detected and classic sudo is missing or unusable, the preflight stops
 with recovery guidance. Install Ubuntu's classic sudo package from your terminal:
