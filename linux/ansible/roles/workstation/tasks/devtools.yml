@@ -50,7 +50,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
 
@@ -64,7 +64,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
 
@@ -76,7 +76,7 @@
       - update
   register: copilot_update
   changed_when: copilot_update.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
@@ -93,7 +93,7 @@
       - "@github/copilot"
   register: copilot_install
   changed_when: copilot_install.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
@@ -115,7 +115,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when: ai_cli_npm_check.rc == 0
@@ -130,7 +130,7 @@
       - "@openai/codex"
   register: codex_update
   changed_when: codex_update.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
@@ -148,7 +148,7 @@
       - "@openai/codex"
   register: codex_install
   changed_when: codex_install.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:

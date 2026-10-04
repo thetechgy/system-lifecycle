@@ -1,0 +1,54 @@
+---
+- name: Test sudo selection without privilege escalation
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+
+  tasks:
+    - name: Load sudo compatibility tasks
+      ansible.builtin.include_role:
+        name: linux_context
+        tasks_from: sudo
+        apply:
+          environment:
+            PATH: '{{ fixture_bin }}'
+          tags: always
+      tags: always
+
+    - name: Verify the effective sudo executable
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.config', 'become_exe', plugin_type='become', plugin_name='sudo') == expected_executable
+      become: false
+      when: linux_context_become_context.become_method in ['sudo', 'ansible.builtin.sudo', 'ansible.legacy.sudo']
+      tags: always
+
+    - name: Verify the resolved privilege escalation method
+      ansible.builtin.assert:
+        that:
+          - linux_context_become_context.become_method == expected_method
+          - not linux_context_become_context.changed
+      become: false
+      when: expected_method is defined
+      tags: always
+
+    - name: Verify automatic selection was skipped
+      ansible.builtin.assert:
+        that:
+          - linux_context_sudo_version is not defined or linux_context_sudo_version is skipped
+      become: false
+      when: expect_no_probes | default(false) | bool
+      tags: always
+
+    - name: Verify other escalation plugins retain their executable
+      ansible.builtin.assert:
+        that:
+          - ansible_become_exe is not defined
+          - ansible_sudo_exe is not defined
+          - lookup('ansible.builtin.config', 'become_exe', plugin_type='become', plugin_name='su') == 'su'
+      become: false
+      when: linux_context_become_context.become_method == 'su'
+      tags: always

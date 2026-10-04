@@ -54,6 +54,13 @@ ansible-playbook -K playbooks/update-system.yml --check
 ansible-playbook -K playbooks/update-system.yml -e update_firmware=true
 ```
 
+On Ubuntu 26.04, the shared playbook context detects sudo-rs and uses the installed
+classic `sudo.ws` executable for Ansible password authentication. Ubuntu 24.04
+continues using its default sudo. Explicit Ansible executable overrides take
+precedence. Non-sudo become methods, including CLI-selected methods, bypass
+detection. See [sudo compatibility and authentication checks](linux/ansible/README.md#sudo-compatibility)
+for recovery instructions.
+
 ## Linux Ansible Model
 
 The Linux playbooks use Ansible tags and extra variables instead of Bash flags.
@@ -114,7 +121,7 @@ The only supported Linux shell entrypoint is `linux/ansible/scripts/ensure-ansib
 
 ## Requirements
 
-- Ubuntu 24.04 LTS (or compatible Debian-based distribution)
+- Ubuntu 24.04 LTS or 26.04 LTS (or compatible Debian-based distribution)
 - Ansible Core 2.15+ (`ansible-playbook`)
 - Root/sudo privileges for system changes
 - Optional: npm (for global package updates)

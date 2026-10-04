@@ -1,4 +1,7 @@
 ---
+- name: Select a compatible sudo executable
+  ansible.builtin.import_tasks: 'sudo.yml'
+
 - name: Set repository paths
   ansible.builtin.set_fact:
     ansible_root: "{{ playbook_dir | dirname }}"
@@ -13,7 +16,7 @@
         else (
           lookup('ansible.builtin.env', 'SUDO_USER')
           if lookup('ansible.builtin.env', 'SUDO_USER') | length > 0 and lookup('ansible.builtin.env', 'SUDO_USER') != 'root'
-          else ansible_user_id
+          else ansible_facts['user_id']
         )
       }}
 
@@ -34,7 +37,7 @@
     resolved_target_uid: "{{ ansible_facts.getent_passwd[resolved_target_user][1] }}"
     resolved_target_gid: "{{ ansible_facts.getent_passwd[resolved_target_user][2] }}"
     resolved_target_group: "{{ target_group_lookup.stdout }}"
-    is_wsl: "{{ 'microsoft' in ansible_kernel | lower }}"
+    is_wsl: "{{ 'microsoft' in ansible_facts['kernel'] | lower }}"
 
 - name: Set target command environment
   ansible.builtin.set_fact:

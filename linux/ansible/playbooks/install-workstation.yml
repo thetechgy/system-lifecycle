@@ -8,6 +8,8 @@
     - name: Load local execution context
       ansible.builtin.include_role:
         name: linux_context
+        apply:
+          tags: always
       tags: always
 
   roles:

@@ -1,0 +1,38 @@
+---
+- name: Test context using namespaced gathered facts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: '{{ ansible_playbook_python }}'
+
+  tasks:
+    - name: Seed gathered facts without shadowing subsequent module facts
+      ansible.builtin.set_fact:
+        cacheable: true
+        kernel: '{{ fixture_kernel | default("Linux-fixture") }}'
+        user_id: fixture_login
+      tags: always
+
+    - name: Load the shared execution context
+      ansible.builtin.include_role:
+        name: linux_context
+        apply:
+          environment:
+            PATH: '{{ fixture_bin }}'
+          tags: always
+      tags: always
+
+    - name: Verify resolved user context
+      ansible.builtin.assert:
+        that:
+          - resolved_target_user == expected_user
+          - resolved_target_home == expected_home
+          - resolved_target_uid == '1001'
+          - resolved_target_gid == '1002'
+          - resolved_target_group == 'fixture_group'
+          - is_wsl == (expected_wsl | default(false) | bool)
+          - target_user_environment.HOME == expected_home
+          - target_user_environment.XDG_RUNTIME_DIR == '/run/user/1001'
+          - target_user_environment.DBUS_SESSION_BUS_ADDRESS == 'unix:path=/run/user/1001/bus'
+      tags: always

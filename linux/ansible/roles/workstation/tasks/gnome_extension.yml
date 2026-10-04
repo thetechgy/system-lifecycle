@@ -20,7 +20,7 @@
   changed_when: false
   failed_when: false
   check_mode: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
 
@@ -59,7 +59,7 @@
       - "/tmp/{{ gnome_extension.uuid | regex_replace('[^A-Za-z0-9_.-]', '_') }}.zip"
   register: gnome_extension_install
   changed_when: gnome_extension_install.rc == 0
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
@@ -75,7 +75,7 @@
       - "{{ gnome_extension.uuid }}"
   changed_when: false
   failed_when: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when: not ansible_check_mode
@@ -89,7 +89,7 @@
     stdin: "{{ lookup('file', repo_root + '/' + gnome_extension.dconf_file | default('')) }}"
   changed_when: false
   failed_when: false
-  become: "{{ resolved_target_user != ansible_user_id }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
   become_user: "{{ resolved_target_user }}"
   environment: "{{ target_user_environment }}"
   when:
