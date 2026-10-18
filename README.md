@@ -67,7 +67,7 @@ The Linux playbooks use Ansible tags and extra variables instead of Bash flags.
 
 ### Update Playbook
 
-`playbooks/update-system.yml` performs APT update/upgrade/dist-upgrade, Snap refresh, Flatpak system and user updates, target-user npm global updates, optional Snap-based Node.js management, optional firmware updates, and APT cleanup.
+`playbooks/update-system.yml` performs APT update/upgrade/dist-upgrade, Snap refresh, Flatpak system and user updates, target-user nvm/Node LTS, npm/global package, and Codex updates, optional Snap-based Node.js management, optional firmware updates, and APT cleanup.
 
 ```bash
 ansible-playbook -K playbooks/update-system.yml --tags apt
@@ -112,6 +112,42 @@ ansible-playbook -K playbooks/install-workstation.yml -e cis_profile=cis_level2_
 ```
 
 See `linux/ansible/README.md` for the complete Linux Ansible command reference.
+
+## Developer-tool updates
+
+`linux-update` updates installed nvm, moves its existing default Node runtime to the latest LTS, migrates global tools, and makes LTS the default. Older runtimes and linked packages are retained. npm without nvm is supported. Missing tools are skipped; project dependencies are untouched. Snap Node.js remains opt-in and workstation provisioning is unchanged.
+
+| Operation | Linux variable (default) | Windows skip switch |
+|---|---|---|
+| nvm and Node LTS | `update_nvm: true` | `-NoNvm` |
+| npm and general global packages | `update_npm: true` | `-NoNpm` |
+| npm-managed and standalone Codex | `update_codex_cli: true` | `-NoCodex` |
+
+Linux discovers nvm at `{{ resolved_target_home }}/.nvm`; override `nvm_dir` for a custom location. The reviewed upstream release is pinned by `nvm_release` (currently `v0.40.8`). Git and script installations retain their method; modified or unrecognized installations fail without overwriting local changes. No shell profiles are loaded. Use `--check` to preview without upgrades, downloads, or runtime switches.
+
+### Windows launch and migration
+
+Launch `windows/update/Update-System.ps1` from **unelevated** Windows PowerShell 5.1 or PowerShell 7. It requests UAC for system updates in a child using the current PowerShell executable, waits, then updates developer tools in the original user session. UAC cancellation and child failures remain failures in the final exit code while independent user phases still run. The orchestrator and Codex fallback pass no execution-policy overrides; the signed nvm installer controls its own internal migration commands. An elevated full invocation is rejected; `-SystemOnly` explicitly runs system phases from an elevated session.
+
+```powershell
+.\windows\update\Update-System.ps1 -DryRun
+.\windows\update\Update-System.ps1 -WhatIf
+.\windows\update\Update-System.ps1 -NoNvm -NoCodex
+```
+
+Existing nvm-windows 2.x installations use `nvm upgrade` when its updater is installed. Legacy/manual installations use the official stable community installer with Authenticode validation and upstream 1.x migration. Running processes under affected program/runtime directories defer migration; close developer tools before retrying. Process inspection failures also stop migration. No process is deliberately terminated by this script. Upstream silent setup can terminate processes that start after the final preflight scan, so keep the disposable acceptance environment quiescent.
+
+Before migration, configuration, runtime hashes, and each runtime's global packages are saved in a user/SYSTEM-only directory under `%LOCALAPPDATA%\SystemLifecycle\recovery`. Retained runtimes and packages are verified before installing LTS. Treat these recovery files as private: they may contain configuration credentials and local paths. Keep them until recovery is no longer needed, then delete them yourself.
+
+### Failures and recovery
+
+A failed runtime migration, malformed inventory, incompatible Node engine, or preservation check stops dependent npm updates and returns a failure. Independent standalone Codex updates can still run. npm and Codex have dedicated phases; linked packages are never replaced by registry packages. General global tools update to registry `latest` subject to Node engine checks. With nvm on Linux, npm uses `nvm install-latest-npm`; other installations enforce npm's declared Node engine before installation. npm cache verification/cleanup runs in the original Windows user session, with `-Clean` requesting aggressive cleanup when npm updates are enabled.
+
+If migration fails, retain the recovery inventory and existing runtime directories. On Linux, restore the previous default with `nvm alias default <old-version>` and `nvm use <old-version>`. On Windows, inspect the private inventory locally and use `nvm use <old-version>` after verifying that version exists. For incomplete installer migration, follow the [upstream installer guidance](https://docs.nvm-windows.com/install/installers/) rather than deleting old directories or reinstalling global packages blindly.
+
+Codex installations are updated explicitly through npm when present there. Recognized official standalone installations use the documented [`codex update`](https://learn.chatgpt.com/docs/developer-commands?surface=cli) self-updater when available, preserving their directory. Ambiguous package-manager/custom installations are reported and skipped; older recognized standalone builds use the official unattended installer in the same visible command directory. `-DryRun`, `-WhatIf`, and Ansible check mode perform no tool updates, installer downloads, switches, or elevation.
+
+Real nvm-windows migration, installer behavior, UAC, and Windows PowerShell 5.1 runtime acceptance require a disposable Windows machine. Linux-host fixture tests do not establish those guarantees; see [architecture and acceptance guidance](docs/architecture.md).
 
 ## Bootstrap Helper
 

@@ -19,10 +19,10 @@
   when: update_nodejs | bool
   tags: [nodejs, update]
 
-- name: Run npm global package updates
+- name: Run installed developer tool updates
   ansible.builtin.import_tasks: npm.yml
-  when: update_npm | bool
-  tags: [npm, update]
+  when: update_nvm | bool or update_npm | bool or update_codex_cli | bool
+  tags: [always, update]
 
 - name: Run firmware updates
   ansible.builtin.import_tasks: firmware.yml

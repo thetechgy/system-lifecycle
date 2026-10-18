@@ -102,7 +102,12 @@ ansible-playbook -K playbooks/update-system.yml -e update_nodejs=true
 | `update_apt` | `true` | Run apt update/upgrade/cleanup |
 | `update_snap` | `true` | Refresh snaps when snap is installed |
 | `update_flatpak` | `true` | Update system and user flatpaks |
-| `update_npm` | `true` | Update target-user npm globals |
+| `update_npm` | `true` | Update npm itself and general target-user npm globals |
+| `update_nvm` | `true` | Update installed nvm and migrate its default Node runtime to latest LTS |
+| `update_codex_cli` | `true` | Update installed npm-managed or recognized standalone Codex |
+| `nvm_dir` | target home + `/.nvm` | Explicit nvm installation path; profiles are never sourced |
+| `codex_home` | target home + `/.codex` | Official standalone package home, including custom installations |
+| `nvm_release` | `v0.40.8` | Exact stable upstream nvm release |
 | `update_firmware` | `false` | Run fwupd firmware updates |
 | `update_nodejs` | `false` | Install/refresh Snap Node.js |
 | `apt_full_clean` | `false` | Use `apt-get clean` instead of autoclean |
@@ -135,7 +140,7 @@ ansible-playbook -K playbooks/install-workstation.yml --tags security
 
 ## Tags
 
-- `apt`, `snap`, `flatpak`, `npm`, `nodejs`, `firmware`
+- `apt`, `snap`, `flatpak`, `nvm`, `npm`, `codex`, `nodejs`, `firmware`
 - `security`, `ubuntu_pro`, `usg`
 - `apps`, `devtools`, `extensions`, `gnome`, `fastfetch`
 - `shell`, `aliases`
@@ -147,3 +152,19 @@ ansible-playbook -K playbooks/install-workstation.yml --tags security
 - Discord is not installed by default because this role does not configure a Discord package source.
 - User-scoped commands run as `target_user`, with user `HOME`, `PATH`, `XDG_RUNTIME_DIR`, and DBus environment set.
 - Firmware and USG/CIS hardening are skipped on WSL where they do not apply.
+
+## Developer tools and recovery
+
+`linux-update` includes installed developer tools by default. The `nvm`, `npm`, and `codex` tags select their own operations; variables can disable them independently. For example:
+
+```bash
+ansible-playbook playbooks/update-system.yml --tags nvm,npm,codex --check
+ansible-playbook playbooks/update-system.yml --tags npm -e update_codex_cli=false
+ansible-playbook playbooks/update-system.yml -e '{"nvm_dir":"/home/example/custom-nvm","update_npm":false}'
+```
+
+The role runs as the resolved target user, loads only `nvm.sh`, and uses the existing default as the migration source. It retains old Node versions, copies missing globals at their installed versions, preserves linked packages, and handles destinations that already exist. It refuses conflicting link/registry destinations. After migration, dedicated phases update npm, general globals, and Codex according to controls. Existing destination packages are retained during migration. npm without nvm uses its installed Node executable. Project dependencies are never installed or updated.
+
+Git nvm installations must have an unmodified worktree and match their reported upstream release. Script installations must match all three upstream files before replacement. Unrecognized installations fail for manual review. Snap Node.js and workstation provisioning retain their existing behavior.
+
+Check mode does not load nvm or invoke tool workers. Failures stop dependent runtime/package updates; standalone Codex remains independent. Older Node runtimes remain available: inspect the failure locally, then restore with `nvm alias default <old-version>` and `nvm use <old-version>` if needed. Do not delete old runtime directories until migration and linked tools are verified. See the root README for Windows controls and private migration recovery files.
