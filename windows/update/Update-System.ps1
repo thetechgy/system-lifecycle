@@ -16,7 +16,16 @@
     Suppress non-essential output.
 
 .PARAMETER NoNpm
-    Skip npm global package updates.
+    Skip npm itself and general global package updates.
+
+.PARAMETER NoNvm
+    Skip nvm updates and Node LTS migration.
+
+.PARAMETER NoCodex
+    Skip npm-managed and standalone Codex updates.
+
+.PARAMETER SystemOnly
+    Run only system phases in an elevated session.
 
 .PARAMETER NoChocolatey
     Skip Chocolatey package updates.
@@ -66,7 +75,7 @@
     Author: Travis McDade
     License: MIT
     Version: 1.1.0
-    Requires: PowerShell 5.1+, Windows 10/11, Administrator privileges
+    Requires: PowerShell 5.1+, Windows 10/11; launch full updates unelevated
 
     Supported vendor tools:
     - Dell Command Update (dcu-cli.exe)
@@ -92,6 +101,12 @@ param(
     [Parameter()]
     [Alias('n')]
     [switch]$NoNpm,
+
+    [switch]$NoNvm,
+
+    [switch]$NoCodex,
+
+    [switch]$SystemOnly,
 
     [Parameter()]
     [switch]$NoChocolatey,
@@ -809,66 +824,7 @@ function Update-ScoopPackages {
     }
 }
 
-# -----------------------------------------------------------------------------
-# NPM Functions
-# -----------------------------------------------------------------------------
-
-function Update-NpmPackages {
-    [CmdletBinding()]
-    param(
-        [switch]$DryRun,
-        [switch]$Skip
-    )
-
-    if ($Skip) {
-        return
-    }
-
-    if (-not (Test-CommandExists 'npm')) {
-        return
-    }
-
-    Write-Section 'NPM Global Packages'
-
-    Write-LogInfo 'Checking for outdated npm global packages...'
-    $outdated = $null
-    try {
-        $outdated = npm outdated -g --parseable 2>$null
-    } catch {
-        # Ignore errors from npm outdated
-    }
-
-    if (-not $outdated) {
-        Write-LogSuccess 'All npm global packages are up to date'
-        return
-    }
-
-    Write-LogInfo 'Outdated packages found:'
-    foreach ($line in $outdated) {
-        if (Test-ShouldLogLine $line) {
-            Write-LogInfo "  $line"
-        }
-    }
-
-    if ($DryRun) {
-        Write-LogInfo '[DRY-RUN] Would run: npm update -g'
-        return
-    }
-
-    Write-LogInfo 'Updating npm global packages...'
-    try {
-        # Stream output in real-time instead of buffering
-        npm update -g 2>&1 | ForEach-Object {
-            if (Test-ShouldLogLine $_) {
-                Write-LogInfo "  $_"
-            }
-        }
-        Write-LogSuccess 'npm global packages updated'
-    } catch {
-        Write-LogWarning "Some npm packages could not be updated: $_"
-        $Script:ExitCode = $ExitCodes.NpmFailed
-    }
-}
+. (Join-Path $Script:ScriptDir 'DeveloperTools.ps1')
 
 # -----------------------------------------------------------------------------
 # Cleanup Functions
@@ -920,21 +876,6 @@ function Invoke-Cleanup {
         }
     }
 
-    # npm cache cleanup
-    if (Test-CommandExists 'npm') {
-        Write-LogInfo 'Cleaning npm cache...'
-        try {
-            if ($Aggressive) {
-                $null = npm cache clean --force 2>&1
-            } else {
-                $null = npm cache verify 2>&1
-            }
-            Write-LogSuccess 'npm cache cleaned'
-        } catch {
-            Write-LogWarning 'Could not clean npm cache'
-        }
-    }
-
     # Windows temp files (aggressive mode only)
     if ($Aggressive) {
         Write-LogInfo 'Cleaning Windows temp files...'
@@ -963,7 +904,7 @@ function Invoke-Cleanup {
 # Main
 # -----------------------------------------------------------------------------
 
-function Main {
+function Invoke-SystemUpdate {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter()]
@@ -971,9 +912,6 @@ function Main {
 
         [Parameter()]
         [switch]$Quiet,
-
-        [Parameter()]
-        [switch]$NoNpm,
 
         [Parameter()]
         [switch]$NoChocolatey,
@@ -991,11 +929,6 @@ function Main {
         [switch]$Clean
     )
 
-    # Version check first (before anything else)
-    Test-ForUpdates
-
-    # Require administrator
-    $null = Test-Administrator -ExitIfNot
 
     # Initialize logging
     Initialize-Logging -ScriptName 'Update-System' -Quiet:$Quiet
@@ -1004,7 +937,6 @@ function Main {
     Write-LogInfo "Dry-run mode: $DryRun"
     Write-LogInfo "Skip Chocolatey: $NoChocolatey"
     Write-LogInfo "Skip Scoop: $NoScoop"
-    Write-LogInfo "Skip npm: $NoNpm"
     Write-LogInfo "Include drivers/firmware: $IncludeDrivers"
     Write-LogInfo "Aggressive cleanup: $Clean"
     Write-LogInfo "Skip PatchMyPC: $NoPatchMyPC"
@@ -1014,40 +946,36 @@ function Main {
 
     # Windows Update (primary)
     if ($DryRun -or $PSCmdlet.ShouldProcess('Windows Update', 'install available Windows updates')) {
-        Update-WindowsSystem -DryRun:$DryRun -IncludeDrivers:$IncludeDrivers
+        Invoke-UpdatePhase { Update-WindowsSystem -DryRun:$DryRun -IncludeDrivers:$IncludeDrivers }
     }
 
     # Vendor-specific firmware/drivers (Dell, Lenovo)
     if ($IncludeDrivers) {
         if ($DryRun -or $PSCmdlet.ShouldProcess('Vendor firmware and drivers', 'install available firmware and driver updates')) {
-            Update-VendorFirmware -DryRun:$DryRun
+            Invoke-UpdatePhase { Update-VendorFirmware -DryRun:$DryRun }
         }
     }
 
     # Package managers
     if ($DryRun -or $PSCmdlet.ShouldProcess('winget packages', 'upgrade installed packages')) {
-        Update-WingetPackages -DryRun:$DryRun
+        Invoke-UpdatePhase { Update-WingetPackages -DryRun:$DryRun }
     }
 
     if (-not $NoChocolatey -and ($DryRun -or $PSCmdlet.ShouldProcess('Chocolatey packages', 'upgrade installed packages'))) {
-        Update-ChocolateyPackages -DryRun:$DryRun
+        Invoke-UpdatePhase { Update-ChocolateyPackages -DryRun:$DryRun }
     }
 
     if (-not $NoScoop -and ($DryRun -or $PSCmdlet.ShouldProcess('Scoop packages', 'upgrade installed packages'))) {
-        Update-ScoopPackages -DryRun:$DryRun
-    }
-
-    if (-not $NoNpm -and ($DryRun -or $PSCmdlet.ShouldProcess('npm global packages', 'upgrade installed packages'))) {
-        Update-NpmPackages -DryRun:$DryRun
+        Invoke-UpdatePhase { Update-ScoopPackages -DryRun:$DryRun }
     }
 
     if (-not $NoPatchMyPC -and ($DryRun -or $PSCmdlet.ShouldProcess('PatchMyPC applications', 'install available application updates'))) {
-        Update-PatchMyPC -DryRun:$DryRun
+        Invoke-UpdatePhase { Update-PatchMyPC -DryRun:$DryRun }
     }
 
     # Cleanup
     if ($DryRun -or $PSCmdlet.ShouldProcess('package and temporary caches', 'remove stale cache files')) {
-        Invoke-Cleanup -DryRun:$DryRun -Aggressive:$Clean
+        Invoke-UpdatePhase { Invoke-Cleanup -DryRun:$DryRun -Aggressive:$Clean }
     }
 
     Write-Section 'Update Complete'
@@ -1069,6 +997,96 @@ function Main {
         Write-LogError "Update completed with errors (exit code: $Script:ExitCode)"
     }
 
+    return $Script:ExitCode
+}
+
+function Invoke-UpdatePhase {
+    [CmdletBinding()]
+    param([scriptblock]$Action)
+    try { & $Action } catch {
+        Write-LogError 'Update phase failed; continuing independent phases.'
+        if ($Script:ExitCode -eq 0) { $Script:ExitCode = 1 }
+    }
+}
+
+function Start-SystemUpdateChild {
+    [CmdletBinding()]
+    param([hashtable]$Options)
+    # Encode a fixed command with an allowlisted switch map, avoiding native
+    # argument splitting of paths. Do not bypass execution policy.
+    $scriptPath = Join-Path $Script:ScriptDir 'Update-System.ps1'
+    $literalPath = "'" + $scriptPath.Replace("'", "''") + "'"
+    $switches = @('-SystemOnly')
+    foreach ($name in @('Quiet', 'NoChocolatey', 'NoScoop', 'NoPatchMyPC', 'IncludeDrivers', 'Clean')) {
+        if ($Options[$name]) { $switches += '-' + $name }
+    }
+    $command = '& ' + $literalPath + ' ' + ($switches -join ' ')
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $executable = (Get-Process -Id $PID).Path
+    $child = Start-Process -FilePath $executable -Verb RunAs -ArgumentList @('-NoProfile', '-NonInteractive', '-EncodedCommand', $encoded) -Wait -PassThru -ErrorAction Stop
+    if ($null -eq $child.ExitCode) { throw 'Elevated child did not provide an exit status.' }
+    return $child.ExitCode
+}
+
+function Main {
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [switch]$DryRun, [switch]$Quiet, [switch]$NoNpm,
+        [switch]$NoNvm, [switch]$NoCodex, [switch]$SystemOnly,
+        [switch]$NoChocolatey, [switch]$NoScoop, [switch]$NoPatchMyPC,
+        [switch]$IncludeDrivers, [switch]$Clean
+    )
+    $Script:ExitCode = 0
+    $preview = $DryRun -or $WhatIfPreference
+    if (-not $preview) {
+        $elevated = Test-Administrator
+        if (-not $SystemOnly -and $elevated) {
+            Write-LogError 'Restart Update-System.ps1 in an unelevated PowerShell session. Use -SystemOnly for elevated system maintenance.'
+            return 3
+        }
+        if ($SystemOnly -and -not $elevated) {
+            Write-LogError '-SystemOnly requires an elevated PowerShell session.'
+            return 3
+        }
+    }
+    Test-ForUpdates
+    Initialize-Logging -ScriptName 'Update-System' -Quiet:$Quiet
+    $systemOptions = @{
+        Quiet = $Quiet; NoChocolatey = $NoChocolatey; NoScoop = $NoScoop
+        NoPatchMyPC = $NoPatchMyPC; IncludeDrivers = $IncludeDrivers; Clean = $Clean
+    }
+    if ($SystemOnly -or $preview) {
+        $systemResult = Invoke-SystemUpdate @systemOptions -DryRun:$DryRun -WhatIf:$WhatIfPreference
+        if ($systemResult -ne 0) { $Script:ExitCode = $systemResult }
+    } elseif ($PSCmdlet.ShouldProcess('system updates', 'launch elevated child and wait')) {
+        try {
+            $systemResult = Start-SystemUpdateChild -Options $systemOptions
+            if ($systemResult -ne 0) { $Script:ExitCode = $systemResult }
+        } catch {
+            Write-LogError 'System update elevation failed or UAC was cancelled; continuing user developer-tool updates.'
+            $Script:ExitCode = 1
+        }
+    }
+    if ($SystemOnly) { return $Script:ExitCode }
+    $codex = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
+    $runtime = $null
+    $runtimeFailed = $false
+    try {
+        if (-not $NoNvm -and ($DryRun -or $PSCmdlet.ShouldProcess('nvm and Node LTS', 'update and preserve installed global tools'))) {
+            $runtime = Update-NvmRuntime -DryRun:$DryRun
+        }
+        if ((-not $NoNpm -or -not $NoCodex) -and ($DryRun -or $PSCmdlet.ShouldProcess('npm and npm-managed Codex', 'update selected installed tools'))) {
+            Update-NpmPackages -Runtime $runtime -DryRun:$DryRun -Skip:$NoNpm -NoCodex:$NoCodex -Clean:$Clean
+        }
+    } catch {
+        $runtimeFailed = $true
+        Write-LogError 'Developer runtime phase failed; dependent npm updates stopped. Check private recovery inventory before retrying.'
+        if ($Script:ExitCode -eq 0) { $Script:ExitCode = 6 }
+    }
+    if (-not $NoCodex -and ($DryRun -or $PSCmdlet.ShouldProcess('standalone Codex', 'update recognized installed CLI'))) {
+        Invoke-UpdatePhase { Update-StandaloneCodex -DryRun:$DryRun -Path $codex.Source }
+    }
+    if ($runtimeFailed) { Write-LogWarning 'Inspect retained runtime directories and the private recovery inventory before retrying.' }
     return $Script:ExitCode
 }
 
