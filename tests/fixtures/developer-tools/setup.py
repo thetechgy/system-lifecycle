@@ -14,6 +14,10 @@ semver = subprocess.check_output([real_node, '-e', 'console.log(require.resolve(
 semver_root = Path(semver).parent
 while not (semver_root / 'package.json').exists():
     semver_root = semver_root.parent
+bin_links = subprocess.check_output([real_node, '-e', 'console.log(require.resolve("bin-links", {paths:[process.argv[1]]}))', str(real_npm.parent)], text=True).strip()
+bin_links_root = Path(bin_links).parent
+while not (bin_links_root / 'package.json').exists():
+    bin_links_root = bin_links_root.parent
 version = subprocess.check_output([real_node, '--version'], text=True).strip()
 (root / 'node-version').write_text(version)
 (root / 'real-node').write_text(real_node)
@@ -42,12 +46,13 @@ for destination, runtime_version in [(nvm_dir / 'versions/node/v20.0.0', 'v20.0.
     (destination / 'bin/npm').symlink_to('../npm-cli.js')
     (destination / 'node_modules').mkdir()
     (destination / 'node_modules/semver').symlink_to(semver_root)
+    (destination / 'node_modules/bin-links').symlink_to(bin_links_root)
     packages = {'npm': {'version': '1.0.0'}}
     if runtime_version == 'v20.0.0':
         packages.update({'tool': {'version': '1.0.0'}, '@openai/codex': {'version': '1.0.0'}, 'local-tool': {'version': '1.0.0', 'link': True}})
     (destination / 'packages.json').write_text(json.dumps(packages))
     for name, entry in packages.items():
-        location = destination / 'globals' / name
+        location = destination / 'lib/node_modules' / name
         location.parent.mkdir(parents=True, exist_ok=True)
         if entry.get('link'):
             location.symlink_to(root / 'linked')

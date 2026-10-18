@@ -42,19 +42,47 @@ function verify(before, after, exact = false) {
     }
   }
 }
-function migrate(cli, before) {
+async function linkGlobal(cli, name, entry) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(entry.link, 'package.json'), 'utf8'));
+  if (manifest.name !== name) throw new Error('Linked package name mismatch');
+  // npm's installer can run prepare for folder dependencies even when scripts
+  // are disabled. Link directly, using its bundled, version-matched bin linker.
+  const binLinks = require(require.resolve('bin-links', {paths: [path.dirname(cli)]}));
+  const root = run(cli, ['root', '--global']);
+  if (!path.isAbsolute(root) || root.includes('\n')) throw new Error('Invalid npm root');
+  const location = path.join(root, name);
+  const options = {path: location, pkg: manifest, global: true, top: true, force: false};
+  await binLinks.checkBins(options);
+  for (const relative of Object.values(manifest.bin || {})) {
+    const source = fs.realpathSync(path.resolve(entry.link, relative));
+    const boundary = path.relative(entry.link, source);
+    if (boundary === '..' || boundary.startsWith('..' + path.sep) || path.isAbsolute(boundary)) {
+      throw new Error('Linked command leaves its package directory');
+    }
+    if (!fs.statSync(source).isFile()) throw new Error('Linked command is missing');
+  }
+  if (!fs.existsSync(location)) {
+    fs.mkdirSync(path.dirname(location), {recursive: true});
+    fs.symlinkSync(entry.link, location, process.platform === 'win32' ? 'junction' : 'dir');
+  } else if (fs.realpathSync(location) !== entry.link) {
+    throw new Error('Conflicting global package link');
+  }
+  await binLinks(options);
+  const commands = binLinks.getPaths({...options, pkg: {...manifest, man: []}});
+  if (commands.some(command => !fs.existsSync(command))) throw new Error('Linked command verification failed');
+}
+async function migrate(cli, before) {
   const current = inventory(cli);
   for (const [name, entry] of Object.entries(before)) {
     if (name === 'npm') continue;
     if (current[name]) {
       // A destination link or registry package must never be silently replaced.
       verify({[name]: entry}, current);
+      if (entry.link) await linkGlobal(cli, name, entry);
       continue;
     }
     if (entry.link) {
-      const manifest = JSON.parse(fs.readFileSync(path.join(entry.link, 'package.json'), 'utf8'));
-      if (manifest.name !== name) throw new Error('Linked package name mismatch');
-      run(cli, ['install', '--global', '--install-links=false', '--ignore-scripts', '--package-lock=false', '--no-save', '--', entry.link]);
+      await linkGlobal(cli, name, entry);
     } else {
       run(cli, ['install', '--global', '--engine-strict', '--', `${name}@${entry.version}`]);
     }
@@ -62,6 +90,7 @@ function migrate(cli, before) {
   }
   verify(before, inventory(cli));
 }
+
 function installLatest(cli, name) {
   const info = JSON.parse(run(cli, ['view', `${name}@latest`, 'version', 'engines', '--json']));
   if (!info || !version.test(info.version || '')) throw new Error('Invalid npm registry metadata');
@@ -76,11 +105,11 @@ function installLatest(cli, name) {
   const updated = inventory(cli)[name];
   if (!updated || updated.version !== info.version) throw new Error('npm update verification failed');
 }
-function main(input) {
+async function main(input) {
   let cli = input.cli;
   if (!path.isAbsolute(cli) || !fs.existsSync(cli)) throw new Error('Cannot resolve selected npm CLI');
   if (input.action === 'inventory') return inventory(cli);
-  if (input.action === 'migrate') { migrate(cli, input.packages); return {}; }
+  if (input.action === 'migrate') { await migrate(cli, input.packages); return {}; }
   if (input.action === 'verify') { verify(input.packages, inventory(cli), true); return {}; }
   if (input.action === 'update') {
     const before = inventory(cli);
@@ -102,7 +131,8 @@ function main(input) {
   throw new Error('Unknown npm operation');
 }
 if (require.main === module) {
-  try { process.stdout.write(JSON.stringify(main(JSON.parse(fs.readFileSync(0, 'utf8'))))); }
-  catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
+  Promise.resolve().then(() => main(JSON.parse(fs.readFileSync(0, 'utf8'))))
+    .then(result => process.stdout.write(JSON.stringify(result)))
+    .catch(error => { process.stderr.write(`${error.message}\n`); process.exitCode = 1; });
 }
 module.exports = {main};

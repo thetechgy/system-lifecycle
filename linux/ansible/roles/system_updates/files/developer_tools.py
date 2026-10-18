@@ -191,7 +191,10 @@ def main():
     os.environ.pop('BASH_ENV', None)
     os.environ.pop('ENV', None)
     # Same shared worker as Windows; call its exported function for node -e.
-    config['npm_worker'] += '\nprocess.stdout.write(JSON.stringify(module.exports.main(JSON.parse(require("fs").readFileSync(0,"utf8")))));'
+    config['npm_worker'] += ('\nconst workerMain = module.exports.main;'
+                             'Promise.resolve().then(() => workerMain(JSON.parse(require("fs").readFileSync(0,"utf8"))))'
+                             '.then(result => process.stdout.write(JSON.stringify(result)))'
+                             '.catch(() => { process.stderr.write("npm worker failed\\n"); process.exitCode = 1; });')
     original = shutil.which('codex')
     errors = []
     try:

@@ -50,7 +50,7 @@ run_tools() {
 assert_migrated() {
   [ "$(cat "$TOOL_FIXTURE/custom nvm/default")" = "$FIXTURE_NODE_VERSION" ]
   [ -f "$TOOL_FIXTURE/custom nvm/versions/node/v20.0.0/bin/node" ]
-  [ -L "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/globals/local-tool" ]
+  [ -L "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/lib/node_modules/local-tool" ]
   python3 - "$TOOL_FIXTURE" "$FIXTURE_NODE_VERSION" <<'PY'
 import json, pathlib, sys
 root=pathlib.Path(sys.argv[1])
@@ -172,7 +172,7 @@ root=pathlib.Path(sys.argv[1]); data=json.loads((root/'custom nvm/versions/node/
 assert data['npm']['version']=='2.0.0'
 assert data['tool']['version']=='2.0.0'
 calls=[json.loads(line) for line in (root/'npm-calls.jsonl').read_text().splitlines()]
-assert any(call['cli'].endswith('/globals/npm/bin/npm-cli.js') and call['args'][0]=='view' and call['args'][1]=='tool@latest' for call in calls)
+assert any(call['cli'].endswith('/lib/node_modules/npm/bin/npm-cli.js') and call['args'][0]=='view' and call['args'][1]=='tool@latest' for call in calls)
 assert data['@openai/codex']['version']=='1.0.0'
 assert data['local-tool']['link']
 PY
@@ -191,7 +191,7 @@ SH
 
 @test "conflicting destination links fail without overwriting them" {
   cp -a "$TOOL_FIXTURE/destination" "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION"
-  mkdir -p "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/globals/local-tool"
+  mkdir -p "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/lib/node_modules/local-tool"
   python3 - "$TOOL_FIXTURE" "$FIXTURE_NODE_VERSION" <<'PY'
 import json, pathlib, sys
 p=pathlib.Path(sys.argv[1])/'custom nvm/versions/node'/sys.argv[2]/'packages.json'
@@ -200,7 +200,7 @@ PY
   run_tools
   [ "$status" -ne 0 ]
   [ "$(cat "$TOOL_FIXTURE/custom nvm/default")" = v20.0.0 ]
-  [ ! -L "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/globals/local-tool" ]
+  [ ! -L "$TOOL_FIXTURE/custom nvm/versions/node/$FIXTURE_NODE_VERSION/lib/node_modules/local-tool" ]
 }
 
 @test "standalone Codex updates independently after a malformed npm inventory" {
