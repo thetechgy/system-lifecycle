@@ -212,7 +212,7 @@ Describe 'Elevated child command construction' {
             $null = Start-SystemUpdateChild -Options @{}
             Should -Invoke Start-Process -Times 1 -ParameterFilter {
                 $decoded = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($ArgumentList[-1]))
-                $decoded -match "fixture user''s/update directory" -and $decoded.StartsWith("& '")
+                $decoded -match "fixture user''s[\\/]update directory" -and $decoded.StartsWith("& '")
             }
         } finally { $Script:ScriptDir = $old }
     }
@@ -297,24 +297,27 @@ Describe 'Process and Codex source detection' {
         Mock Write-LogWarning {}
         Mock Invoke-DeveloperCommand { 'update    Update installed release' }
         Mock Test-Path { $true }
+        $script:AffectedNvmRoot = Join-Path $TestDrive 'NvM'
+        $script:AffectedNvmExecutable = (Join-Path $script:AffectedNvmRoot 'node.exe').ToUpperInvariant()
+        $script:SiblingNvmExecutable = Join-Path (Join-Path $TestDrive 'NvM-other') 'node.exe'
         Mock Get-CimInstance { @() }
         Mock Get-StandaloneCodexRoot { $null }
         Mock Get-Content { 'node_modules/@openai/codex/bin/codex.js' }
     }
 
     It 'detects affected process paths case-insensitively with a directory boundary' {
-        Mock Get-CimInstance { @(@{ Name = 'node.exe'; ExecutablePath = '/fixture/nvm/node.exe' }) }
-        { Assert-NvmProcessesStopped @('/fixture/nvm') } | Should -Throw '*migration deferred*'
+        Mock Get-CimInstance { @(@{ Name = 'node.exe'; ExecutablePath = $script:AffectedNvmExecutable }) }
+        { Assert-NvmProcessesStopped @($script:AffectedNvmRoot) } | Should -Throw '*migration deferred*'
     }
 
     It 'does not confuse a sibling directory with an affected root' {
-        Mock Get-CimInstance { @(@{ Name = 'node.exe'; ExecutablePath = '/fixture/nvm-other/node.exe' }) }
-        { Assert-NvmProcessesStopped @('/fixture/nvm') } | Should -Not -Throw
+        Mock Get-CimInstance { @(@{ Name = 'node.exe'; ExecutablePath = $script:SiblingNvmExecutable }) }
+        { Assert-NvmProcessesStopped @($script:AffectedNvmRoot) } | Should -Not -Throw
     }
 
     It 'fails closed when an affected process cannot be inspected' {
         Mock Get-CimInstance { @(@{ Name = 'node.exe'; ExecutablePath = $null }) }
-        { Assert-NvmProcessesStopped @('/fixture/nvm') } | Should -Throw '*Cannot inspect*'
+        { Assert-NvmProcessesStopped @($script:AffectedNvmRoot) } | Should -Throw '*Cannot inspect*'
     }
 
     It 'does not invoke standalone updates for npm shims or ambiguous binaries' {
