@@ -3,6 +3,11 @@ update_apt: true
 update_snap: true
 update_flatpak: true
 update_npm: true
+update_nvm: true
+update_codex_cli: true
+nvm_dir: "{{ resolved_target_home }}/.nvm"
+nvm_release: v0.40.8
+codex_home: "{{ resolved_target_home }}/.codex"
 update_firmware: false
 update_nodejs: false
 apt_full_clean: false

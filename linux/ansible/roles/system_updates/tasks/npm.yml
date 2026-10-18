@@ -1,46 +1,51 @@
 ---
-- name: Check whether npm is available for target user
-  ansible.builtin.command: /bin/sh -c 'command -v npm >/dev/null 2>&1'
-  register: npm_check
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
-  become_user: "{{ resolved_target_user }}"
-  environment: "{{ target_user_environment }}"
-
-- name: Report missing npm
+- name: Preview developer tool updates
   ansible.builtin.debug:
-    msg: "npm is not installed for {{ resolved_target_user }}; skipping npm updates."
-  when: npm_check.rc != 0
-
-- name: Check outdated npm globals for target user
-  ansible.builtin.command: npm outdated -g --parseable
-  register: npm_outdated
-  changed_when: false
-  failed_when: false
-  check_mode: false
-  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
-  become_user: "{{ resolved_target_user }}"
-  environment: "{{ target_user_environment }}"
-  when: npm_check.rc == 0
-
-- name: Update npm globals for target user
-  ansible.builtin.command: npm update -g
-  register: npm_update_result
-  changed_when: npm_update_result.rc == 0
-  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
-  become_user: "{{ resolved_target_user }}"
-  environment: "{{ target_user_environment }}"
+    msg: 'Check mode: would update installed nvm/Node LTS, npm globals, and Codex as the target user according to controls and tags'
   when:
-    - npm_check.rc == 0
-    - npm_outdated.stdout | default('') | length > 0
-    - not ansible_check_mode
-
-- name: Explain skipped npm update
-  ansible.builtin.debug:
-    msg: "Check mode: would run npm update -g as {{ resolved_target_user }}."
-  when:
-    - npm_check.rc == 0
-    - npm_outdated.stdout | default('') | length > 0
     - ansible_check_mode
+    - ansible_run_tags | intersect(['all', 'update', 'nvm', 'npm', 'codex']) | length > 0
+
+- name: Update installed developer tools as target user
+  ansible.builtin.command:
+    argv:
+      - '{{ ansible_facts.python.executable }}'
+      - -c
+      - >-
+        import base64; exec(base64.b64decode("{{ lookup('ansible.builtin.file', role_path ~ '/files/developer_tools.py') | b64encode }}"))
+    stdin: '{{ developer_update_config | to_json }}'
+  vars:
+    developer_update_config:
+      nvm_dir: '{{ nvm_dir }}'
+      codex_home: '{{ codex_home }}'
+      nvm_release: '{{ nvm_release }}'
+      npm_worker: "{{ lookup('ansible.builtin.file', role_path ~ '/../../../../shared/npm-tools.cjs') }}"
+      nvm: "{{ update_nvm | bool and ('all' in ansible_run_tags or 'update' in ansible_run_tags or 'nvm' in ansible_run_tags) and 'nvm' not in ansible_skip_tags }}"
+      npm: "{{ update_npm | bool and ('all' in ansible_run_tags or 'update' in ansible_run_tags or 'npm' in ansible_run_tags) and 'npm' not in ansible_skip_tags }}"
+      codex: "{{ update_codex_cli | bool and ('all' in ansible_run_tags or 'update' in ansible_run_tags or 'codex' in ansible_run_tags) and 'codex' not in ansible_skip_tags }}"
+  become: "{{ resolved_target_user != ansible_facts['user_id'] }}"
+  become_user: "{{ resolved_target_user }}"
+  environment: '{{ target_user_environment }}'
+  no_log: true
+  register: developer_update_result
+  failed_when: false
+  changed_when: "'CHANGED' in developer_update_result.stdout_lines | default([])"
+  when:
+    - not ansible_check_mode
+    - ansible_run_tags | intersect(['all', 'update', 'nvm', 'npm', 'codex']) | length > 0
+    - developer_update_config.nvm | bool or developer_update_config.npm | bool or developer_update_config.codex | bool
+
+
+- name: Report developer tool results
+  ansible.builtin.debug:
+    msg: '{{ developer_update_result.stdout_lines }}'
+  when:
+    - developer_update_result is not skipped
+    - developer_update_result.stdout_lines is defined
+
+- name: Report failed developer tool phase
+  ansible.builtin.fail:
+    msg: "{{ developer_update_result.stderr | default('Developer-tool execution failed; dependent updates stopped') }}"
+  when:
+    - developer_update_result is not skipped
+    - developer_update_result.rc | default(1) != 0
