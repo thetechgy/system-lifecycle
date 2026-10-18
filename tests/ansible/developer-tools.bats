@@ -138,6 +138,7 @@ PY
   touch "$TOOL_FIXTURE/fail-install"
   run_tools
   [ "$status" -ne 0 ]
+  [[ "$output" == *"npm migrate failed: npm install failed"* ]]
   [ "$(cat "$TOOL_FIXTURE/custom nvm/default")" = v20.0.0 ]
 }
 
@@ -145,7 +146,54 @@ PY
   touch "$TOOL_FIXTURE/incompatible"
   run_tools -e '{"update_nvm":false}'
   [ "$status" -ne 0 ]
+  [[ "$output" == *"npm update failed: Package requires an incompatible Node engine"* ]]
   ! grep -q '"install"' "$TOOL_FIXTURE/npm-calls.jsonl"
+}
+
+@test "packages without engines update through production tasks" {
+  for metadata in '"2.0.0"' '["2.0.0"]' '[{"version":"2.0.0","engines":{"node":">=14"}}]'; do
+    printf '%s\n' "$metadata" > "$TOOL_FIXTURE/metadata-response"
+    run_tools -e '{"update_nvm":false}'
+    [ "$status" -eq 0 ]
+  done
+  python3 - "$TOOL_FIXTURE" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1])
+data=json.loads((root/'custom nvm/versions/node/v20.0.0/packages.json').read_text())
+assert data['tool']['version']=='2.0.0'
+assert data['@openai/codex']['version']=='2.0.0'
+assert data['local-tool']['link']
+PY
+}
+
+@test "malformed registry metadata stops updates without installs" {
+  touch "$TOOL_FIXTURE/bad-metadata"
+  run_tools -e '{"update_nvm":false}'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"npm update failed: Invalid npm registry metadata"* ]]
+  ! grep -q '"install"' "$TOOL_FIXTURE/npm-calls.jsonl"
+}
+
+@test "unexpected npm errors do not disclose private subprocess output" {
+  cat >> "$TOOL_FIXTURE/custom nvm/versions/node/v20.0.0/npm-cli.js" <<'JS'
+process.stderr.write('private-package private-path private-token');
+process.exitCode = 7;
+JS
+  run_tools
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"npm inventory failed: npm ls failed"* ]]
+  [[ "$output" != *"private-package"* ]]
+  [[ "$output" != *"private-path"* ]]
+  [[ "$output" != *"private-token"* ]]
+}
+
+@test "unexpected worker exceptions do not disclose filesystem paths" {
+  rm -r "$TOOL_FIXTURE/custom nvm/versions/node/v20.0.0/lib/node_modules/tool"
+  run_tools
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"npm inventory failed: worker execution or response validation failed"* ]]
+  [[ "$output" != *"ENOENT"* ]]
+  [[ "$output" != *"$TOOL_FIXTURE"* ]]
 }
 
 @test "skipping npm tag retains nvm migration and independent Codex updates" {
@@ -256,6 +304,75 @@ PY
   [ ! -e "$project/node_modules" ]
   [ -L "$TOOL_FIXTURE/real-prefix/lib/node_modules/fixture-linked-tool" ]
   [ -L "$TOOL_FIXTURE/real-prefix/bin/fixture-linked-tool" ]
+}
+
+@test "real npm accepts a release without engines from an isolated registry" {
+  run python3 - "$TOOL_FIXTURE" "$REPO_ROOT" <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from threading import Thread
+import json, os, subprocess, sys
+
+root, repo = map(Path, sys.argv[1:])
+package = root/'metadata-prefix/lib/node_modules/@openai/codex'
+package.mkdir(parents=True)
+manifest = {'name':'@openai/codex', 'version':'1.0.0'}
+(package/'package.json').write_text(json.dumps(manifest))
+requests = []
+class Registry(BaseHTTPRequestHandler):
+    def do_GET(self):
+        requests.append(self.path)
+        if self.path.lower() not in ('/@openai%2fcodex', '/@openai/codex'):
+            self.send_error(404)
+            return
+        payload = json.dumps({'name':'@openai/codex', 'dist-tags':{'latest':'1.0.0'},
+                              'versions':{'1.0.0':manifest}}).encode()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *_):
+        pass
+server = HTTPServer(('127.0.0.1', 0), Registry)
+thread = Thread(target=server.serve_forever, daemon=True)
+thread.start()
+try:
+    env = {key:value for key,value in os.environ.items()
+           if not key.lower().startswith('npm_config_')}
+    env.update(HOME=str(root/'home'), npm_config_prefix=str(root/'metadata-prefix'),
+               npm_config_cache=str(root/'metadata-cache'),
+               npm_config_registry=f'http://127.0.0.1:{server.server_port}',
+               npm_config_userconfig=str(root/'empty-user-npmrc'),
+               npm_config_globalconfig=str(root/'empty-global-npmrc'),
+               npm_config_audit='false', npm_config_fund='false', npm_config_update_notifier='false')
+    node = (root/'real-node').read_text()
+    cli = (root/'real-npm-cli').read_text()
+    # Prove real npm emits one of the no-engines shapes used by the fixtures.
+    metadata = subprocess.run([node, cli, 'view', '@openai/codex@latest', 'version', 'engines', '--json'],
+                              env=env, text=True, capture_output=True, check=True, timeout=30)
+    assert json.loads(metadata.stdout) in ('1.0.0', ['1.0.0']), metadata.stdout
+    for engine in (None, '>=14', '>=999'):
+        if engine:
+            manifest['engines'] = {'node':engine}
+        result = subprocess.run([node, str(repo/'shared/npm-tools.cjs')],
+                                input=json.dumps({'cli':cli, 'action':'update', 'npm':False, 'codex':True}),
+                                env=env, text=True, capture_output=True, timeout=30)
+        if engine == '>=999':
+            assert result.returncode != 0
+            assert result.stderr.strip() == 'Package requires an incompatible Node engine'
+        else:
+            assert result.returncode == 0, result.stderr
+            assert json.loads(result.stdout) == {}
+    assert json.loads((package/'package.json').read_text()) == {'name':'@openai/codex', 'version':'1.0.0'}
+    assert requests and all('codex' in request for request in requests)
+finally:
+    server.shutdown()
+    server.server_close()
+    thread.join()
+PY
+  printf '%s\n' "$output"
+  [ "$status" -eq 0 ]
 }
 
 @test "script nvm upgrades preserve installation method and reject modified files before replacement" {

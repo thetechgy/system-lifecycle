@@ -10,6 +10,20 @@ import tempfile
 import urllib.request
 
 
+# Only fixed worker messages may leave the private subprocess output. npm and
+# filesystem exceptions can include configuration, package names, or local paths.
+NPM_ERRORS = {
+    'Malformed npm inventory', 'Invalid npm root', 'Malformed npm package',
+    'Unverifiable npm link', 'Global package preservation verification failed',
+    'Linked package name mismatch', 'Linked command leaves its package directory',
+    'Linked command is missing', 'Conflicting global package link',
+    'Linked command verification failed', 'Invalid npm registry metadata',
+    'Package requires an incompatible Node engine', 'npm update verification failed',
+    'Cannot resolve selected npm CLI',
+    *(f'npm {verb} failed' for verb in ('ls', 'root', 'view', 'install', 'cache')),
+}
+
+
 def run(args, env=None):
     result = subprocess.run(args, text=True, capture_output=True, env=env, check=False)
     if result.returncode:
@@ -97,7 +111,10 @@ def packages(config, node, cli, action, **options):
                             text=True, capture_output=True, env=env, check=False)
     # node -e has no require.main: invoke the exported entry explicitly.
     if result.returncode:
-        raise RuntimeError('npm inventory, migration, engine, or update verification failed')
+        detail = result.stderr.strip()
+        if detail not in NPM_ERRORS:
+            detail = 'worker execution or response validation failed'
+        raise RuntimeError(f'npm {action} failed: {detail}')
     return json.loads(result.stdout)
 
 
@@ -194,7 +211,7 @@ def main():
     config['npm_worker'] += ('\nconst workerMain = module.exports.main;'
                              'Promise.resolve().then(() => workerMain(JSON.parse(require("fs").readFileSync(0,"utf8"))))'
                              '.then(result => process.stdout.write(JSON.stringify(result)))'
-                             '.catch(() => { process.stderr.write("npm worker failed\\n"); process.exitCode = 1; });')
+                             '.catch(error => { process.stderr.write(String(error.message)); process.exitCode = 1; });')
     original = shutil.which('codex')
     errors = []
     try:

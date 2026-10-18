@@ -24,7 +24,9 @@ if (args[0] === 'ls') {
   else console.log(JSON.stringify({dependencies: state}));
 } else if (args[0] === 'root') console.log(globals);
 else if (args[0] === 'view') {
-  console.log(JSON.stringify({version: '2.0.0', engines: {node: fs.existsSync(process.env.TOOL_FIXTURE + '/incompatible') ? '>=999' : '>=14'}}));
+  if (fs.existsSync(process.env.TOOL_FIXTURE + '/metadata-response')) console.log(fs.readFileSync(process.env.TOOL_FIXTURE + '/metadata-response', 'utf8'));
+  else if (fs.existsSync(process.env.TOOL_FIXTURE + '/bad-metadata')) console.log('["2.0.0","3.0.0"]');
+  else console.log(JSON.stringify({version: '2.0.0', engines: {node: fs.existsSync(process.env.TOOL_FIXTURE + '/incompatible') ? '>=999' : '>=14'}}));
 } else if (args[0] === 'install') {
   const spec = args[args.length - 1];
   if (path.isAbsolute(spec)) throw new Error('Folder installs must not be used for link migration');

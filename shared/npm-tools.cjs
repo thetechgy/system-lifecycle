@@ -92,8 +92,16 @@ async function migrate(cli, before) {
 }
 
 function installLatest(cli, name) {
-  const info = JSON.parse(run(cli, ['view', `${name}@latest`, 'version', 'engines', '--json']));
-  if (!info || !version.test(info.version || '')) throw new Error('Invalid npm registry metadata');
+  const response = JSON.parse(run(cli, ['view', `${name}@latest`, 'version', 'engines', '--json']));
+  // npm 12 wraps a single release in an array; earlier npm versions unwrap it.
+  const metadata = Array.isArray(response) && response.length === 1 ? response[0] : response;
+  // npm unwraps a single returned field. Releases without engines therefore
+  // produce a version string rather than {version, engines}.
+  const info = typeof metadata === 'string' ? {version: metadata} : metadata;
+  if (!info || Array.isArray(info) || !version.test(info.version || '') ||
+      (info.engines !== undefined && (!info.engines || typeof info.engines !== 'object' || Array.isArray(info.engines)))) {
+    throw new Error('Invalid npm registry metadata');
+  }
   // npm ships semver; reuse the selected npm's engine evaluator, never download one.
   const semver = require(require.resolve('semver', {paths: [path.dirname(cli)]}));
   if (info.engines && info.engines.node && !semver.satisfies(process.version, info.engines.node)) {

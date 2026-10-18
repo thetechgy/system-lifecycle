@@ -168,3 +168,5 @@ The role runs as the resolved target user, loads only `nvm.sh`, and uses the exi
 Git nvm installations must have an unmodified worktree and match their reported upstream release. Script installations must match all three upstream files before replacement. Unrecognized installations fail for manual review. Snap Node.js and workstation provisioning retain their existing behavior.
 
 Check mode does not load nvm or invoke tool workers. Failures stop dependent runtime/package updates; standalone Codex remains independent. Older Node runtimes remain available: inspect the failure locally, then restore with `nvm alias default <old-version>` and `nvm use <old-version>` if needed. Do not delete old runtime directories until migration and linked tools are verified. See the root README for Windows controls and private migration recovery files.
+
+Packages without an `engines` declaration are supported. Errors report the failed npm operation and a fixed diagnostic when recognized, without publishing raw npm output or local paths.
