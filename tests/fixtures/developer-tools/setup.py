@@ -19,6 +19,10 @@ version = subprocess.check_output([real_node, '--version'], text=True).strip()
 (root / 'real-node').write_text(real_node)
 (root / 'real-npm-cli').write_text(str(real_npm))
 (root / 'bin').mkdir()
+# Expose only the non-tool commands needed by the nvm/Codex fixtures.
+# A runner's system node/npm must never be discovered by missing-tool tests.
+for name in ('cat', 'cp', 'touch', 'uname'):
+    (root / 'bin' / name).symlink_to(shutil.which(name))
 (root / 'bin/git').write_text('#!/bin/sh\ncase "$*" in *rev-parse*) echo fixture-head;; esac\n')
 (root / 'bin/git').chmod(0o755)
 nvm_dir = root / 'custom nvm'

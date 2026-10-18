@@ -18,6 +18,7 @@ setup() {
   connection: local
   gather_facts: false
   vars:
+    ansible_python_interpreter: /usr/bin/python3
     ansible_facts:
       user_id: fixture
       python:
@@ -27,7 +28,7 @@ setup() {
     nvm_dir: "$TOOL_FIXTURE/custom nvm"
     target_user_environment:
       HOME: "$TOOL_FIXTURE/home"
-      PATH: "$TOOL_FIXTURE/bin:/usr/bin:/bin"
+      PATH: "$TOOL_FIXTURE/bin"
       TOOL_FIXTURE: "$TOOL_FIXTURE"
       FIXTURE_NODE_VERSION: "$FIXTURE_NODE_VERSION"
       BASH_ENV: "$TOOL_FIXTURE/profile"
