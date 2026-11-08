@@ -1,4 +1,8 @@
 ---
+- name: Update installed stable PowerShell
+  ansible.builtin.import_tasks: powershell.yml
+  tags: [powershell]
+
 - name: Update apt cache
   ansible.builtin.apt:
     update_cache: true
