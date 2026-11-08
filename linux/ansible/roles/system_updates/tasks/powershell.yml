@@ -1,0 +1,69 @@
+---
+- name: Inspect installed stable PowerShell package
+  ansible.builtin.command:
+    argv: [dpkg-query, --show, '--showformat=${db:Status-Status} ${Version}', powershell]
+  register: powershell_installed
+  changed_when: false
+  failed_when: powershell_installed.rc not in [0, 1]
+  check_mode: false
+
+- name: Resolve PowerShell package support
+  ansible.builtin.set_fact:
+    powershell_package_present: "{{ powershell_installed.rc == 0 and powershell_installed.stdout is match('^installed 7[.]') }}"
+    powershell_platform_supported: >-
+      {{ ansible_facts['architecture'] == 'x86_64' and
+         ((ansible_facts['distribution'] == 'Ubuntu' and ansible_facts['distribution_version'] in ['22.04', '24.04', '26.04']) or
+          (ansible_facts['distribution'] == 'Debian' and ansible_facts['distribution_major_version'] in ['12', '13'])) }}
+
+- name: Report skipped PowerShell update
+  ansible.builtin.debug:
+    msg: 'No supported APT-managed stable PowerShell 7 installation; skipping PowerShell updates'
+  when: not powershell_package_present or not powershell_platform_supported
+
+- name: Preview PowerShell update
+  ansible.builtin.debug:
+    msg: 'Check mode: would ensure the official Microsoft product source and upgrade installed stable PowerShell; no downloads or changes'
+  when: powershell_package_present and powershell_platform_supported and ansible_check_mode
+
+- name: Update supported installed PowerShell
+  when: powershell_package_present and powershell_platform_supported and not ansible_check_mode
+  block:
+    - name: Inspect active Microsoft product sources
+      ansible.builtin.command:
+        argv: [/usr/bin/python3, '-c', "import apt_pkg; from urllib.parse import urlparse; apt_pkg.init(); s=apt_pkg.SourceList(); s.read_main_list(); print(any(urlparse(x.uri).hostname == 'packages.microsoft.com' and '/prod' in urlparse(x.uri).path for x in s.list))"]
+      register: powershell_source
+      changed_when: false
+
+    - name: Validate product source discovery
+      ansible.builtin.assert:
+        that: powershell_source.stdout | trim in ['True', 'False']
+        fail_msg: 'Could not determine the active Microsoft product source'
+
+    - name: Prepare missing Microsoft product source
+      when: powershell_source.stdout | trim == 'False'
+      block:
+        - name: Load existing Microsoft signing key setup
+          ansible.builtin.include_role:
+            name: workstation
+            tasks_from: microsoft_repo
+            apply:
+              tags: powershell
+            public: true
+
+        - name: Configure release-specific Microsoft product source
+          ansible.builtin.apt_repository:
+            repo: "deb [arch=amd64 signed-by={{ microsoft_keyring }}] https://packages.microsoft.com/{{ ansible_facts['distribution'] | lower }}/{{ ansible_facts['distribution_version'] if ansible_facts['distribution'] == 'Ubuntu' else ansible_facts['distribution_major_version'] }}/prod {{ ansible_facts['distribution_release'] }} main"
+            filename: microsoft-prod
+            state: present
+            update_cache: false
+          become: true
+
+    - name: Upgrade installed stable PowerShell from APT
+      ansible.builtin.apt:
+        name: powershell
+        state: latest
+        only_upgrade: true
+        update_cache: true
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      become: true

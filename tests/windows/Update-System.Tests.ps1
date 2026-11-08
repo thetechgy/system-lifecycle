@@ -28,6 +28,7 @@ Describe 'Update-System ShouldProcess behavior' {
     BeforeEach {
         $script:CalledPhases = @()
 
+        Mock Update-PowerShellPackage {}
         Mock Test-ForUpdates {}
         Mock Test-Administrator { return $true }
         Mock Initialize-Logging {}
@@ -59,6 +60,7 @@ Describe 'Update-System ShouldProcess behavior' {
         Main -WhatIf | Should -Be 0
 
         $script:CalledPhases | Should -BeNullOrEmpty
+        Should -Invoke Update-PowerShellPackage -Times 0
     }
 
     It 'keeps DryRun as the richer preview path' {
@@ -93,6 +95,7 @@ Describe 'Update-System ShouldProcess behavior' {
 
 Describe 'Unelevated update orchestration' {
     BeforeEach {
+        Mock Update-PowerShellPackage {}
         Mock Test-ForUpdates {}
         Mock Initialize-Logging {}
         Mock Write-LogInfo {}
@@ -108,6 +111,7 @@ Describe 'Unelevated update orchestration' {
 
     It 'waits for elevated system work then updates tools in the caller' {
         Main | Should -Be 0
+        Should -Invoke Update-PowerShellPackage -Times 1 -ParameterFilter { $Scope -eq 'user' }
         Should -Invoke Start-SystemUpdateChild -Times 1 -Exactly
         Should -Invoke Update-NvmRuntime -Times 1 -Exactly
         Should -Invoke Update-NpmPackages -Times 1 -Exactly -ParameterFilter { $Runtime.Node -eq 'fixture-node' }
@@ -127,6 +131,7 @@ Describe 'Unelevated update orchestration' {
         Should -Invoke Invoke-SystemUpdate -Times 1
         Should -Invoke Update-NvmRuntime -Times 0
         Should -Invoke Update-NpmPackages -Times 0
+        Should -Invoke Update-PowerShellPackage -Times 0 -ParameterFilter { $Scope -eq 'user' }
     }
 
     It 'rejects unelevated SystemOnly' {

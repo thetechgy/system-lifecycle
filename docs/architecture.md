@@ -127,3 +127,13 @@ There is no transaction spanning an upstream installer, nvm, and npm. Partial up
 6. Inject an installer failure or missing retained runtime/package; verify dependent npm updates stop, final status stays nonzero, and recovery information remains available. Restore the old runtime using the private inventory and verify tools before removing any old data.
 
 Bats runs production Ansible tasks against isolated runtimes and a local npm registry fixture, plus an offline real-npm linked-package test with a temporary prefix/cache (verified with Node 24.15.0 and npm 12.2.0); Pester exercises orchestration and migration boundaries with mocks. These checks do not prove real UAC, Windows process enumeration, Authenticode, installer migration, or PowerShell 5.1 runtime behavior. No disposable Windows environment was available during this implementation.
+
+## Stable PowerShell 7 updates
+
+The APT phase updates existing stable `powershell` installations and configures a
+missing official Microsoft product source for supported x64 Ubuntu/Debian releases.
+Use `--tags powershell` for the targeted operation, `--check` for a preview, or
+`update_apt=false` to disable APT work. Package holds remain effective.
+
+See the [PowerShell update contract](../README.md#stable-powershell-7-updates)
+for platform support, Windows session deferral, and native acceptance limitations.

@@ -170,3 +170,13 @@ Git nvm installations must have an unmodified worktree and match their reported 
 Check mode does not load nvm or invoke tool workers. Failures stop dependent runtime/package updates; standalone Codex remains independent. Older Node runtimes remain available: inspect the failure locally, then restore with `nvm alias default <old-version>` and `nvm use <old-version>` if needed. Do not delete old runtime directories until migration and linked tools are verified. See the root README for Windows controls and private migration recovery files.
 
 Packages without an `engines` declaration are supported. Errors report the failed npm operation and a fixed diagnostic when recognized, without publishing raw npm output or local paths.
+
+## Stable PowerShell 7 updates
+
+The APT phase updates existing stable `powershell` installations and configures a
+missing official Microsoft product source for supported x64 Ubuntu/Debian releases.
+Use `--tags powershell` for the targeted operation, `--check` for a preview, or
+`update_apt=false` to disable APT work. Package holds remain effective.
+
+See the [PowerShell update contract](../../README.md#stable-powershell-7-updates)
+for platform support, Windows session deferral, and native acceptance limitations.
