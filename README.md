@@ -230,3 +230,46 @@ Tests are automatically run in CI on push to `main` and PRs to `main`.
 ## License
 
 MIT
+
+## Stable PowerShell 7 updates
+
+The normal update commands include existing stable PowerShell 7 installations.
+On x64 Ubuntu 22.04/24.04/26.04 and Debian 12/13, the APT phase ensures an
+active Microsoft product repository exists before upgrading `powershell`.
+A missing source is configured for the detected release using Microsoft's signing
+key; existing active product sources are retained. Missing PowerShell, portable
+archives, separate LTS-only packages, and unsupported platforms are skipped.
+Package holds and pins are not overridden. The target is the latest applicable
+stable version offered by the package source, without a hardcoded version.
+
+```bash
+ansible-playbook -K playbooks/update-system.yml --tags powershell
+ansible-playbook playbooks/update-system.yml --tags powershell --check
+```
+
+`update_apt=false` disables the dedicated Linux phase as well as other APT work.
+Check mode performs only discovery and reports the intended work without downloads
+or repository/package changes.
+
+On Windows, WinGet updates the exact `Microsoft.PowerShell` identity, retaining
+its MSI/MSIX format. Machine installations use the elevated system child; user
+installations use the original session. `-SystemOnly` covers machine installations
+only. Missing WinGet or unrecognized installations are reported for manual action.
+WinGet's other applications are updated from its JSON export inventory with exact
+identity/source filters and bulk-upgrade pin semantics. Inventory failures do not
+fall back to an unrestricted batch.
+
+An available PowerShell update is deferred if any `pwsh.exe` process is running
+or process inspection fails. Close PowerShell 7 and retry from **Windows PowerShell
+5.1**. Deferral returns a nonzero final status while independent updates continue.
+Microsoft Update excludes PowerShell, and WinGet's other-app batch excludes its
+stable identity. Chocolatey, Scoop, and PatchMyPC batches are conservatively deferred
+while PowerShell 7 is running because those installers can also replace it.
+No process is deliberately terminated and no automatic reboot is requested.
+Process checks are preflights, not a lock against a new session opening afterward;
+keep PowerShell 7 closed throughout the update. `-DryRun` and `-WhatIf` do not
+export inventory, scan processes, elevate, download, or upgrade PowerShell.
+
+Native MSI/MSIX upgrades, UAC, reboot-required behavior, and Windows PowerShell 5.1
+acceptance require a disposable Windows environment. Local fixture results do not
+establish those guarantees.

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Performs comprehensive system updates including Windows Update,
-    winget packages, optional Chocolatey/Scoop packages, npm global
+    stable PowerShell 7, winget packages, optional Chocolatey/Scoop packages, npm global
     packages, PatchMyPC application updates, and vendor-specific
     firmware/driver updates (Dell Command Update, Lenovo Vantage/System
     Update), with logging and error handling.
@@ -191,7 +191,7 @@ function Update-WindowsSystem {
         Write-LogInfo 'Checking for available updates...'
 
         try {
-            $updates = Get-WindowsUpdate -MicrosoftUpdate -ErrorAction SilentlyContinue
+            $updates = Get-WindowsUpdate -MicrosoftUpdate -NotTitle 'PowerShell' -ErrorAction SilentlyContinue
             if ($IncludeDrivers) {
                 $driverUpdates = Get-WindowsUpdate -UpdateType Driver -ErrorAction SilentlyContinue
                 if ($driverUpdates) {
@@ -217,6 +217,7 @@ function Update-WindowsSystem {
     try {
         $params = @{
             MicrosoftUpdate = $true
+            NotTitle        = 'PowerShell' # Stable PowerShell has a guarded WinGet owner.
             AcceptAll       = $true
             IgnoreReboot    = $true
         }
@@ -638,6 +639,12 @@ function Update-PatchMyPC {
 
     Write-LogInfo "Found PatchMyPC: $patchMyPCPath"
 
+    if (-not $DryRun -and (Test-PowerShellUpdateInUse)) {
+        Write-LogWarning 'Deferring this application batch while PowerShell 7 is running; retry from Windows PowerShell 5.1 after closing PowerShell 7'
+        if ($Script:ExitCode -eq 0) { $Script:ExitCode = 1 }
+        return
+    }
+
     if ($DryRun) {
         Write-LogInfo '[DRY-RUN] Would run: PatchMyPC.exe /auto /silent'
         Write-LogInfo 'PatchMyPC would scan for and install application updates'
@@ -678,40 +685,21 @@ function Update-WingetPackages {
     }
 
     if ($DryRun) {
-        Write-LogInfo '[DRY-RUN] Would run: winget upgrade --all'
-        Write-LogInfo 'Packages that would be upgraded:'
-        try {
-            $upgradeList = winget upgrade --include-unknown 2>&1
-            foreach ($line in $upgradeList) {
-                Write-LogInfo "  $line"
-            }
-        } catch {
-            Write-LogWarning "Could not check for updates: $_"
-        }
+        Write-LogInfo '[DRY-RUN] Would enumerate installed WinGet packages and upgrade other apps, excluding stable PowerShell'
         return
     }
 
-    Write-LogInfo 'Updating winget packages...'
-    # Stream output in real-time instead of buffering (prevents appearing hung)
-    # --disable-interactivity prevents any prompts that could hang the script
-    winget upgrade --all --silent --disable-interactivity --accept-package-agreements --accept-source-agreements 2>&1 |
-        ForEach-Object {
-            if (Test-ShouldLogLine $_) {
-                Write-LogInfo "  $_"
-            }
+    foreach ($package in @(Get-WingetInventory)) {
+        if ($package.Id -eq 'Microsoft.PowerShell') { continue }
+        Write-LogInfo "Updating WinGet package $($package.Id)..."
+        # --all retains bulk-upgrade pin and unknown-version semantics, with
+        # exact filters limiting this invocation to one exported identity.
+        $result = Invoke-WingetCommand @('upgrade', '--all', '--id', $package.Id, '--exact', '--source', $package.Source,
+            '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements')
+        if ($result.Code -notin @('00000000', '8A15002B', '8A150014')) {
+            Write-LogWarning "WinGet package update failed (status $($result.Code)); continuing other packages"
+            if ($Script:ExitCode -eq 0) { $Script:ExitCode = $ExitCodes.WingetFailed }
         }
-    $wingetExitCode = $LASTEXITCODE
-
-    if ($wingetExitCode -eq 0) {
-        Write-LogSuccess 'Winget packages updated'
-    } elseif ($wingetExitCode -eq 2147958015) {
-        # 0x80004005 - Often occurs when updating framework packages in use
-        Write-LogWarning "Some winget packages could not be updated (exit code: $wingetExitCode)"
-        Write-LogWarning 'This may occur when updating packages that are currently in use'
-        $Script:ExitCode = $ExitCodes.WingetFailed
-    } else {
-        Write-LogWarning "Winget completed with exit code: $wingetExitCode"
-        $Script:ExitCode = $ExitCodes.WingetFailed
     }
 }
 
@@ -731,6 +719,12 @@ function Update-ChocolateyPackages {
     }
 
     if (-not (Test-CommandExists 'choco')) {
+        return
+    }
+
+    if (-not $DryRun -and (Test-PowerShellUpdateInUse)) {
+        Write-LogWarning 'Deferring this application batch while PowerShell 7 is running; retry from Windows PowerShell 5.1 after closing PowerShell 7'
+        if ($Script:ExitCode -eq 0) { $Script:ExitCode = 1 }
         return
     }
 
@@ -784,6 +778,12 @@ function Update-ScoopPackages {
         return
     }
 
+    if (-not $DryRun -and (Test-PowerShellUpdateInUse)) {
+        Write-LogWarning 'Deferring this application batch while PowerShell 7 is running; retry from Windows PowerShell 5.1 after closing PowerShell 7'
+        if ($Script:ExitCode -eq 0) { $Script:ExitCode = 1 }
+        return
+    }
+
     Write-Section 'Scoop Packages'
 
     if ($DryRun) {
@@ -825,6 +825,7 @@ function Update-ScoopPackages {
 }
 
 . (Join-Path $Script:ScriptDir 'DeveloperTools.ps1')
+. (Join-Path $Script:ScriptDir 'PowerShellUpdates.ps1')
 
 # -----------------------------------------------------------------------------
 # Cleanup Functions
@@ -956,6 +957,10 @@ function Invoke-SystemUpdate {
         }
     }
 
+    if ($DryRun -or $PSCmdlet.ShouldProcess('machine PowerShell 7', 'upgrade installed stable package')) {
+        Invoke-UpdatePhase { Update-PowerShellPackage -Scope machine -DryRun:$DryRun }
+    }
+
     # Package managers
     if ($DryRun -or $PSCmdlet.ShouldProcess('winget packages', 'upgrade installed packages')) {
         Invoke-UpdatePhase { Update-WingetPackages -DryRun:$DryRun }
@@ -1068,6 +1073,9 @@ function Main {
         }
     }
     if ($SystemOnly) { return $Script:ExitCode }
+    if ($DryRun -or $PSCmdlet.ShouldProcess('user PowerShell 7', 'upgrade installed stable package')) {
+        Invoke-UpdatePhase { Update-PowerShellPackage -Scope user -DryRun:$DryRun }
+    }
     $codex = Get-Command codex -ErrorAction SilentlyContinue | Select-Object -First 1
     $runtime = $null
     $runtimeFailed = $false
